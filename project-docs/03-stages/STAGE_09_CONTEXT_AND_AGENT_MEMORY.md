@@ -147,6 +147,7 @@ npm.cmd run test:smoke --prefix frontend
 
 ## Current Progress
 
+- public-snapshot: Added real-data E2E evidence for new-account discovery, account audit, and performance diagnosis. Two populated but disabled accounts were read-only audited; key conclusions were checked against raw MCP results. See [REAL_DATA_E2E_2026-10-19_CN.md](../05-quality/REAL_DATA_E2E_2026-10-19_CN.md).
 - public-snapshot: Stage opened by explicit user confirmation after Stage 08 closure.
 - public-snapshot: Added ContextAssembler, five-round window, 36k input budget, structured summary and deterministic fallback.
 - public-snapshot: Added task state, active Skill carry-forward, task tool ledger, typed Memory, save/delete API and minimal context UI.

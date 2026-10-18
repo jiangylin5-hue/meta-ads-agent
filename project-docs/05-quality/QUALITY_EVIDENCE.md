@@ -356,3 +356,15 @@ Date: public snapshot
 - `scripts/verify_meta_access_token.py --account-limit 3`: Meta Graph API unreachable, `WinError 10060`.
 - DeepSeek provider remains independently reachable.
 - Current conclusion: real Meta Skill evaluation requires the VPN/proxy path or a deployment network with outbound HTTPS access to `mcp.facebook.com` and `graph.facebook.com`.
+
+## Stage 09 Real-Data Audit And Diagnosis Follow-up
+
+Date: 2026-10-19
+
+- Account discovery used a forced-refresh `account_brief` run and found six readable accounts; two were new relative to the prior four-account baseline.
+- `account_audit` ran on a populated disabled account: 9 steps, 96.4 seconds, 62,560 input / 2,559 output tokens, real lifetime spend and 32 rejected ads, decision `fail`, zero Drafts.
+- `performance_diagnosis` ran on the other populated disabled account: 9 steps, 98.8 seconds, 64,923 input / 5,031 output tokens, $5,669.84 historical 30-day spend, 376,405 impressions, decision `FIX`, zero Drafts.
+- The diagnosis separated account-level delivery blocking, rejected-creative concentration, App-versus-Web conversion definitions, and staged budget recommendations.
+- Key metrics and conclusions were rechecked against cached raw MCP results. Both runs were read-only and used no OpenAI request.
+- Remaining gap: both new accounts were disabled, so live delivery optimization and post-recovery performance remain unverified.
+- Full record: [REAL_DATA_E2E_2026-10-19_CN.md](REAL_DATA_E2E_2026-10-19_CN.md).
