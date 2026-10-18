@@ -1,0 +1,109 @@
+{
+    "schema_version": "1.0",
+    "id": "experiment_design",
+    "version": "0.1.0",
+    "status": "draft",
+    "description": "Design or evaluate a Meta experiment with eligibility, hypothesis, sample, duration, guardrails, and a stopping rule.",
+    "when_to_use": [
+        "A/B or split test eligibility",
+        "design a controlled test",
+        "interpret an existing test",
+        "incrementality or lift question"
+    ],
+    "do_not_use": [
+        "calling ordinary ad variation an A/B test",
+        "declaring a winner from insufficient data",
+        "changing an experiment without approval"
+    ],
+    "advertiser_job": {
+        "default": "other",
+        "alternatives": []
+    },
+    "required_inputs": [
+        "ad_account_id",
+        "decision or hypothesis",
+        "primary metric"
+    ],
+    "optional_inputs": [
+        "entity ids",
+        "test duration",
+        "baseline rate",
+        "minimum effect",
+        "guardrails"
+    ],
+    "read_groups": [
+        "R-ACCOUNT",
+        "R-PERF",
+        "R-EXPERIMENT"
+    ],
+    "optional_read_groups": [],
+    "draft_groups": [
+        "D-EXPERIMENT"
+    ],
+    "required_evidence": [
+        "eligibility",
+        "existing tests",
+        "randomization unit",
+        "primary metric",
+        "sample and duration assumptions",
+        "stopping rule",
+        "guardrails",
+        "missing data"
+    ],
+    "output_contract": {
+        "id": "experiment_plan_v1",
+        "required_fields": [
+            "hypothesis",
+            "design",
+            "assumptions",
+            "missing_data",
+            "decision"
+        ],
+        "decision_modes": [
+            "HOLD",
+            "TEST",
+            "INVESTIGATE"
+        ]
+    },
+    "hard_rules": [
+        "Call ads_experiment_check_eligibility before proposing creation.",
+        "Never call an ordinary ad comparison a randomized A/B test.",
+        "Do not declare significance without a declared stopping rule and sufficient sample.",
+        "Experiment creation and update remain drafts."
+    ],
+    "source_refs": [
+        {
+            "repo": "coreyhaines31/marketingskills",
+            "commit": "365b412152b9542499ca1439426f7fc3cc92bb65",
+            "path": "skills/ab-testing/SKILL.md",
+            "scope": "Hypothesis, sample, stopping, and experimentation rules"
+        },
+        {
+            "repo": "coreyhaines31/marketingskills",
+            "commit": "365b412152b9542499ca1439426f7fc3cc92bb65",
+            "path": "skills/ab-testing/references/sample-size-guide.md",
+            "scope": "Sample-size and duration guidance"
+        },
+        {
+            "repo": "gooseworks-ai/goose-skills",
+            "commit": "70f3da5dc1ac1a8f6ede628733008643063624de",
+            "path": "skills/ads/composites/launch-meta-ad-campaign/SKILL.md",
+            "scope": "Test frame and success metric sections only"
+        }
+    ],
+    "notes": [],
+    "input_gates": {
+        "account": true,
+        "date_window": false,
+        "entity_level": false
+    },
+    "evidence_gates": {
+        "min_reads": 1
+    },
+    "evidence_requirements": {
+        "required_fields": [
+            "source_tools"
+        ],
+        "required_any_tools": []
+    }
+}

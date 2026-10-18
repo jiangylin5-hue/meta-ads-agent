@@ -1,0 +1,139 @@
+{
+    "schema_version": "1.0",
+    "id": "optimization_draft",
+    "version": "0.1.0",
+    "status": "draft",
+    "description": "Convert an evidence-backed Meta diagnosis into a local draft for pause, budget, bid, targeting, creative, or activation review.",
+    "when_to_use": [
+        "pause or resume",
+        "change budget or bid",
+        "replace creative",
+        "create a test action draft"
+    ],
+    "do_not_use": [
+        "diagnosis-only requests",
+        "live execution",
+        "destructive deletion"
+    ],
+    "advertiser_job": {
+        "default": "update_existing_campaigns",
+        "alternatives": [
+            "assess_and_optimize_performance"
+        ]
+    },
+    "required_inputs": [
+        "ad_account_id",
+        "entity id and type",
+        "current value and state",
+        "business target",
+        "evidence"
+    ],
+    "optional_inputs": [
+        "comparison window",
+        "validation window",
+        "rollback condition"
+    ],
+    "read_groups": [
+        "R-ACCOUNT",
+        "R-PERF"
+    ],
+    "optional_read_groups": [
+        "R-CREATIVE",
+        "R-TRACK"
+    ],
+    "draft_groups": [
+        "D-OPT"
+    ],
+    "required_evidence": [
+        "current value",
+        "current status",
+        "comparison evidence",
+        "sample size",
+        "learning state",
+        "proposed value",
+        "risk level",
+        "rollback condition"
+    ],
+    "output_contract": {
+        "id": "optimization_draft_v1",
+        "required_fields": [
+            "evidence",
+            "recommendation",
+            "current_state",
+            "proposed_change",
+            "risk_level",
+            "rollback",
+            "requires_approval",
+            "decision"
+        ],
+        "decision_modes": [
+            "FIX",
+            "TEST",
+            "INVESTIGATE"
+        ]
+    },
+    "hard_rules": [
+        "Read current entity state before a write-like call.",
+        "Draft tools never reach MCP. Approval is not execution.",
+        "Without enough evidence return INVESTIGATE and no draft.",
+        "Do not use a fixed CPA multiple as sole authorization."
+    ],
+    "source_refs": [
+        {
+            "repo": "AgriciDaniel/claude-ads",
+            "commit": "fc3908e786c318776df89a3a098333da377364be",
+            "path": "skills/ads-optimize/SKILL.md",
+            "scope": "Mutation gate, draft default, and destructive-action boundary"
+        },
+        {
+            "repo": "AgriciDaniel/claude-ads",
+            "commit": "fc3908e786c318776df89a3a098333da377364be",
+            "path": "skills/ads-budget/SKILL.md",
+            "scope": "Budget, bidding, pacing, and marginal return"
+        },
+        {
+            "repo": "coreyhaines31/marketingskills",
+            "commit": "365b412152b9542499ca1439426f7fc3cc92bb65",
+            "path": "skills/ads/references/operating-check.md",
+            "scope": "HOLD/FIX/TEST/INVESTIGATE decisions"
+        },
+        {
+            "repo": "coreyhaines31/marketingskills",
+            "commit": "365b412152b9542499ca1439426f7fc3cc92bb65",
+            "path": "skills/ads/references/audit-guardrails.md",
+            "scope": "Recommendation safety"
+        },
+        {
+            "repo": "gooseworks-ai/goose-skills",
+            "commit": "70f3da5dc1ac1a8f6ede628733008643063624de",
+            "path": "skills/ads/composites/meta-ads-analyzer/SKILL.md",
+            "scope": "Learning phase and marginal efficiency"
+        }
+    ],
+    "notes": [
+        "B2B thresholds from MS meta-decision-system are conditional on matching business model and downstream lead data."
+    ],
+    "input_gates": {
+        "account": true,
+        "date_window": true,
+        "target_entity": true
+    },
+    "evidence_gates": {
+        "min_reads": 1
+    },
+    "evidence_requirements": {
+        "required_fields": [
+            "source_tools",
+            "current_state",
+            "current_budget",
+            "current_status",
+            "sample_size",
+            "learning_state",
+            "comparison_window"
+        ],
+        "required_any_tools": [
+            "ads_get_ad_entities",
+            "ads_insights_performance_trend"
+        ]
+    }
+}

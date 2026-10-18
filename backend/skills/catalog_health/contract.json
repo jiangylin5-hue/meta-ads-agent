@@ -1,0 +1,114 @@
+{
+    "schema_version": "1.0",
+    "id": "catalog_health",
+    "version": "0.1.0",
+    "status": "draft",
+    "description": "Inspect Meta catalog, feed, product set, event source, DPA eligibility, and delivery diagnostics with explicit missing data.",
+    "when_to_use": [
+        "products missing from ads",
+        "catalog warning or feed issue",
+        "DPA or Advantage+ readiness",
+        "product match rate"
+    ],
+    "do_not_use": [
+        "inventing health thresholds",
+        "automatic product or feed deletion",
+        "claiming catalog health without catalog_id and evidence"
+    ],
+    "advertiser_job": {
+        "default": "other",
+        "alternatives": []
+    },
+    "required_inputs": [
+        "catalog_id or ad_account_id",
+        "business context"
+    ],
+    "optional_inputs": [
+        "product_feed_id",
+        "product_set_id",
+        "event_source_id"
+    ],
+    "read_groups": [
+        "R-ACCOUNT",
+        "R-CATALOG",
+        "R-PERF"
+    ],
+    "optional_read_groups": [
+        "R-CREATIVE"
+    ],
+    "draft_groups": [
+        "D-CATALOG"
+    ],
+    "required_evidence": [
+        "catalog identity",
+        "feed and product set status",
+        "diagnostics",
+        "DPA health checks",
+        "event source match rate",
+        "source timestamps",
+        "missing data"
+    ],
+    "output_contract": {
+        "id": "catalog_finding_v1",
+        "required_fields": [
+            "facts",
+            "missing_data",
+            "findings",
+            "decision"
+        ],
+        "decision_modes": [
+            "HOLD",
+            "FIX",
+            "INVESTIGATE"
+        ]
+    },
+    "hard_rules": [
+        "No dedicated catalog health Skill exists in the three upstream projects; use only setup, feed-gate, product-reference rules and live MCP schema.",
+        "ads_catalog_get_businesses is identity-scoped; do not attribute a business to an account without account-scoped evidence.",
+        "Preview product filters with ads_catalog_list_products before set creation.",
+        "Deletes, feed removal, and event-source disconnection are high-risk."
+    ],
+    "source_refs": [
+        {
+            "repo": "coreyhaines31/marketingskills",
+            "commit": "365b412152b9542499ca1439426f7fc3cc92bb65",
+            "path": "skills/ads/SKILL.md",
+            "scope": "Meta Catalog setup checklist reference only"
+        },
+        {
+            "repo": "AgriciDaniel/claude-ads",
+            "commit": "fc3908e786c318776df89a3a098333da377364be",
+            "path": "skills/ads-plan/SKILL.md",
+            "scope": "Ecommerce feed gate and revenue evidence reference"
+        },
+        {
+            "repo": "gooseworks-ai/goose-skills",
+            "commit": "70f3da5dc1ac1a8f6ede628733008643063624de",
+            "path": "skills/ads/composites/launch-meta-ad-campaign/SKILL.md",
+            "scope": "Catalog product references and launch readiness only"
+        },
+        {
+            "repo": "gooseworks-ai/goose-skills",
+            "commit": "70f3da5dc1ac1a8f6ede628733008643063624de",
+            "path": "skills/ads/composites/ads-north-star-strategy/SKILL.md",
+            "scope": "Catalog product reference and strategy context"
+        }
+    ],
+    "notes": [
+        "Contract is grounded in upstream setup guidance and live MCP tool descriptions; no threshold is copied from outside the sources."
+    ],
+    "input_gates": {
+        "catalog_or_account": true,
+        "date_window": false,
+        "entity_level": false
+    },
+    "evidence_gates": {
+        "min_reads": 1
+    },
+    "evidence_requirements": {
+        "required_fields": [
+            "source_tools"
+        ],
+        "required_any_tools": []
+    }
+}

@@ -1,0 +1,1 @@
+"""Minimal ReAct agent core."""

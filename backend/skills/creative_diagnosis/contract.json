@@ -1,0 +1,110 @@
+{
+    "schema_version": "1.0",
+    "id": "creative_diagnosis",
+    "version": "0.1.0",
+    "status": "draft",
+    "description": "Diagnose Meta creative performance, fatigue, copy structure, format coverage, and preview context.",
+    "when_to_use": [
+        "which creative is weak or tired",
+        "creative performance by ad",
+        "copy, hook, or format review",
+        "preview request"
+    ],
+    "do_not_use": [
+        "catalog health",
+        "policy approval",
+        "live creative mutation"
+    ],
+    "advertiser_job": {
+        "default": "creative_insights_and_ideas",
+        "alternatives": []
+    },
+    "required_inputs": [
+        "ad_account_id",
+        "date window",
+        "entity level"
+    ],
+    "optional_inputs": [
+        "creative ids",
+        "ad ids",
+        "placement format",
+        "business context"
+    ],
+    "read_groups": [
+        "R-ACCOUNT",
+        "R-CREATIVE",
+        "R-PERF"
+    ],
+    "optional_read_groups": [],
+    "draft_groups": [],
+    "required_evidence": [
+        "ad-level performance",
+        "creative metadata",
+        "preview URL when returned",
+        "media metadata",
+        "window",
+        "observed_at"
+    ],
+    "output_contract": {
+        "id": "creative_finding_v1",
+        "required_fields": [
+            "facts",
+            "hypotheses",
+            "missing_data",
+            "decision"
+        ],
+        "decision_modes": [
+            "HOLD",
+            "FIX",
+            "TEST",
+            "INVESTIGATE"
+        ]
+    },
+    "hard_rules": [
+        "Do not claim visual understanding when only metadata or preview links were returned.",
+        "Include preview_url verbatim when present.",
+        "Resize is coverage, not creative diversity.",
+        "Do not edit creative content with ads_creative_update; that tool handles name, status, and labels."
+    ],
+    "source_refs": [
+        {
+            "repo": "AgriciDaniel/claude-ads",
+            "commit": "fc3908e786c318776df89a3a098333da377364be",
+            "path": "skills/ads-creative/SKILL.md",
+            "scope": "Meta creative audit, fatigue, format, and preview rules"
+        },
+        {
+            "repo": "AgriciDaniel/claude-ads",
+            "commit": "fc3908e786c318776df89a3a098333da377364be",
+            "path": "skills/ads-create/SKILL.md",
+            "scope": "Copy and creative brief rules"
+        },
+        {
+            "repo": "coreyhaines31/marketingskills",
+            "commit": "365b412152b9542499ca1439426f7fc3cc92bb65",
+            "path": "skills/ad-creative/SKILL.md",
+            "scope": "Meta creative formats, hooks, copy, and testing"
+        },
+        {
+            "repo": "gooseworks-ai/goose-skills",
+            "commit": "70f3da5dc1ac1a8f6ede628733008643063624de",
+            "path": "skills/ads/composites/meta-ads-analyzer/SKILL.md",
+            "scope": "Creative Fatigue section only"
+        }
+    ],
+    "notes": [],
+    "input_gates": {
+        "account": true,
+        "date_window": true,
+        "entity_level": true
+    },
+    "evidence_gates": {
+        "min_reads": 1
+    },
+    "evidence_requirements": {
+        "required_fields": [
+            "source_tools"
+        ],
+        "required_any_tools": []
+    }
+}

@@ -1,0 +1,115 @@
+{
+    "schema_version": "1.0",
+    "id": "account_audit",
+    "version": "0.1.0",
+    "status": "draft",
+    "description": "Run an evidence-grounded Meta account audit and report the highest-priority findings with coverage limits.",
+    "when_to_use": [
+        "full account health review",
+        "measurement, structure, creative, budget, delivery, and policy review",
+        "find top problems"
+    ],
+    "do_not_use": [
+        "single metric lookup",
+        "execution of changes",
+        "claims of complete coverage when tools failed"
+    ],
+    "advertiser_job": {
+        "default": "other",
+        "alternatives": [
+            "assess_and_optimize_performance"
+        ]
+    },
+    "required_inputs": [
+        "ad_account_id",
+        "audit window",
+        "business goal or conversion definition"
+    ],
+    "optional_inputs": [
+        "scope",
+        "comparison window",
+        "business model"
+    ],
+    "read_groups": [
+        "R-ACCOUNT",
+        "R-PERF"
+    ],
+    "optional_read_groups": [
+        "R-TRACK",
+        "R-CREATIVE",
+        "R-CATALOG",
+        "R-AUDIENCE",
+        "R-EXPERIMENT"
+    ],
+    "draft_groups": [],
+    "required_evidence": [
+        "requirement and check result",
+        "evidence source",
+        "account_id",
+        "actual window",
+        "observed_at",
+        "evidence coverage",
+        "missing data"
+    ],
+    "output_contract": {
+        "id": "account_audit_v1",
+        "required_fields": [
+            "findings",
+            "evidence_coverage",
+            "missing_data"
+        ],
+        "decision_modes": [
+            "pass",
+            "fail",
+            "unknown",
+            "not_applicable"
+        ]
+    },
+    "hard_rules": [
+        "pass and fail require evidence.",
+        "unknown lowers coverage and never lowers health.",
+        "Do not present a health score below 60 percent evidence coverage.",
+        "Return at most three priority findings."
+    ],
+    "source_refs": [
+        {
+            "repo": "AgriciDaniel/claude-ads",
+            "commit": "fc3908e786c318776df89a3a098333da377364be",
+            "path": "skills/ads-audit/SKILL.md",
+            "scope": "Audit contract, findings, coverage, and synthesis boundaries"
+        },
+        {
+            "repo": "AgriciDaniel/claude-ads",
+            "commit": "fc3908e786c318776df89a3a098333da377364be",
+            "path": "skills/ads-meta/SKILL.md",
+            "scope": "Meta audit scope and controls"
+        },
+        {
+            "repo": "coreyhaines31/marketingskills",
+            "commit": "365b412152b9542499ca1439426f7fc3cc92bb65",
+            "path": "skills/ads/references/audit-guardrails.md",
+            "scope": "Platform-neutral evidence and scoring guardrails"
+        },
+        {
+            "repo": "gooseworks-ai/goose-skills",
+            "commit": "70f3da5dc1ac1a8f6ede628733008643063624de",
+            "path": "skills/ads/composites/meta-ads-analyzer/SKILL.md",
+            "scope": "Meta diagnosis lenses and customer-journey coverage"
+        }
+    ],
+    "notes": [],
+    "input_gates": {
+        "account": true,
+        "date_window": true,
+        "entity_level": false
+    },
+    "evidence_gates": {
+        "min_reads": 1
+    },
+    "evidence_requirements": {
+        "required_fields": [
+            "source_tools"
+        ],
+        "required_any_tools": []
+    }
+}

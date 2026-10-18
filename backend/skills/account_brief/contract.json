@@ -1,0 +1,91 @@
+{
+    "schema_version": "1.0",
+    "id": "account_brief",
+    "version": "0.1.0",
+    "status": "draft",
+    "description": "Summarize current Meta account or entity performance with a named window and missing data.",
+    "when_to_use": [
+        "current spend, results, or best/worst entity",
+        "short account brief",
+        "plain lookup"
+    ],
+    "do_not_use": [
+        "causal diagnosis",
+        "budget/status changes",
+        "audit health score"
+    ],
+    "advertiser_job": {
+        "default": "report_measure_or_look_up",
+        "alternatives": []
+    },
+    "required_inputs": [
+        "ad_account_id or selected account",
+        "date window",
+        "entity level"
+    ],
+    "optional_inputs": [
+        "campaign, ad set, or ad ids"
+    ],
+    "read_groups": [
+        "R-ACCOUNT"
+    ],
+    "optional_read_groups": [],
+    "draft_groups": [],
+    "required_evidence": [
+        "source tool",
+        "account_id",
+        "actual date window",
+        "observed_at",
+        "entity level",
+        "missing data"
+    ],
+    "output_contract": {
+        "id": "account_brief_v1",
+        "required_fields": [
+            "facts",
+            "missing_data"
+        ],
+        "decision_modes": []
+    },
+    "hard_rules": [
+        "Use tool results for every account-specific number.",
+        "Keep facts, assumptions, and missing data separate.",
+        "Do not explain causes in a brief.",
+        "Do not create drafts."
+    ],
+    "source_refs": [
+        {
+            "repo": "gooseworks-ai/goose-skills",
+            "commit": "70f3da5dc1ac1a8f6ede628733008643063624de",
+            "path": "skills/ads/capabilities/answer-ads-questions/SKILL.md",
+            "scope": "Meta read discipline: same-turn reads, window, sync time, stale/partial data"
+        },
+        {
+            "repo": "coreyhaines31/marketingskills",
+            "commit": "365b412152b9542499ca1439426f7fc3cc92bb65",
+            "path": "skills/ads/references/operating-check.md",
+            "scope": "Platform-neutral fact and missing-data rules"
+        },
+        {
+            "repo": "AgriciDaniel/claude-ads",
+            "commit": "fc3908e786c318776df89a3a098333da377364be",
+            "path": "skills/ads-report/SKILL.md",
+            "scope": "Structured report expression"
+        }
+    ],
+    "notes": [],
+    "input_gates": {
+        "account": true,
+        "date_window": true,
+        "entity_level": true
+    },
+    "evidence_gates": {
+        "min_reads": 1
+    },
+    "evidence_requirements": {
+        "required_fields": [
+            "source_tools"
+        ],
+        "required_any_tools": []
+    }
+}

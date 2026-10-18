@@ -1,0 +1,150 @@
+{
+    "schema_version": "1.0",
+    "id": "campaign_plan",
+    "version": "0.2.0",
+    "status": "draft",
+    "description": "Build a Meta campaign plan and create non-live Meta Draft objects from offer, goal, budget, audience, destination, tracking, and business context.",
+    "when_to_use": [
+        "new campaign",
+        "budget and structure plan",
+        "audience and creative matrix",
+        "launch readiness"
+    ],
+    "do_not_use": [
+        "live launch",
+        "unrequested campaign creation",
+        "product release outside Meta ads"
+    ],
+    "advertiser_job": {
+        "default": "plan_future_campaigns",
+        "alternatives": [
+            "create_and_launch_new_ads"
+        ]
+    },
+    "required_inputs": [
+        "offer",
+        "business goal",
+        "budget and duration",
+        "geography",
+        "audience or ICP",
+        "destination",
+        "tracking status"
+    ],
+    "optional_inputs": [
+        "page id",
+        "instagram account",
+        "existing creative",
+        "catalog id",
+        "special ad category"
+    ],
+    "read_groups": [
+        "R-ACCOUNT",
+        "R-PLAN",
+        "R-AUDIENCE",
+        "R-CATALOG"
+    ],
+    "optional_read_groups": [
+        "R-TRACK",
+        "R-CREATIVE"
+    ],
+    "draft_groups": [
+        "D-LAUNCH"
+    ],
+    "required_evidence": [
+        "offer and destination",
+        "account and page access",
+        "audience details",
+        "budget inputs",
+        "tracking state",
+        "catalog eligibility when relevant",
+        "missing data"
+    ],
+    "output_contract": {
+        "id": "campaign_plan_v1",
+        "required_fields": [
+            "plan",
+            "assumptions",
+            "missing_data",
+            "draft_request"
+        ],
+        "decision_modes": []
+    },
+    "hard_rules": [
+        "Do not invent targeting attributes or catalog products.",
+        "Do not claim a Draft is live or published. Report the returned Draft object id and state.",
+        "Create campaign, ad set, ad, and creative objects only through permitted create tools that return Draft Mode objects.",
+        "Never call activation, update, delete, or publish tools.",
+        "Do not use a landing page audit result without a page-reading tool."
+    ],
+    "source_refs": [
+        {
+            "repo": "AgriciDaniel/claude-ads",
+            "commit": "fc3908e786c318776df89a3a098333da377364be",
+            "path": "skills/ads-create/SKILL.md",
+            "scope": "Campaign concepts, messaging, and creative brief"
+        },
+        {
+            "repo": "AgriciDaniel/claude-ads",
+            "commit": "fc3908e786c318776df89a3a098333da377364be",
+            "path": "skills/ads-plan/SKILL.md",
+            "scope": "Campaign architecture, measurement, and rollout"
+        },
+        {
+            "repo": "AgriciDaniel/claude-ads",
+            "commit": "fc3908e786c318776df89a3a098333da377364be",
+            "path": "skills/ads-budget/SKILL.md",
+            "scope": "Budget and bidding plan"
+        },
+        {
+            "repo": "AgriciDaniel/claude-ads",
+            "commit": "fc3908e786c318776df89a3a098333da377364be",
+            "path": "skills/ads-math/SKILL.md",
+            "scope": "CPA, ROAS, break-even, and budget math"
+        },
+        {
+            "repo": "coreyhaines31/marketingskills",
+            "commit": "365b412152b9542499ca1439426f7fc3cc92bb65",
+            "path": "skills/ads/SKILL.md",
+            "scope": "Meta campaign, audience, and tracking sections only"
+        },
+        {
+            "repo": "coreyhaines31/marketingskills",
+            "commit": "365b412152b9542499ca1439426f7fc3cc92bb65",
+            "path": "skills/product-marketing/SKILL.md",
+            "scope": "Business, audience, and KPI context"
+        },
+        {
+            "repo": "gooseworks-ai/goose-skills",
+            "commit": "70f3da5dc1ac1a8f6ede628733008643063624de",
+            "path": "skills/ads/composites/launch-meta-ad-campaign/references/planning-only.md",
+            "scope": "Meta planning-only launch contract"
+        },
+        {
+            "repo": "gooseworks-ai/goose-skills",
+            "commit": "70f3da5dc1ac1a8f6ede628733008643063624de",
+            "path": "skills/ads/composites/ads-north-star-strategy/SKILL.md",
+            "scope": "Goal, budget, test frame, and success metric"
+        },
+        {
+            "repo": "gooseworks-ai/goose-skills",
+            "commit": "70f3da5dc1ac1a8f6ede628733008643063624de",
+            "path": "skills/ads/composites/ad-management-intake/SKILL.md",
+            "scope": "Question and assumption rules only"
+        }
+    ],
+    "notes": [],
+    "input_gates": {
+        "account": true,
+        "date_window": false,
+        "entity_level": false
+    },
+    "evidence_gates": {
+        "min_reads": 1
+    },
+    "evidence_requirements": {
+        "required_fields": [
+            "source_tools"
+        ],
+        "required_any_tools": []
+    }
+}

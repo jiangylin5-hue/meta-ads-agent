@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 40 24% 96%;
+  --foreground: 30 14% 9%;
+  --card: 0 0% 100%;
+  --card-foreground: 30 14% 9%;
+  --primary: 30 12% 11%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 36 16% 92%;
+  --secondary-foreground: 30 14% 9%;
+  --muted: 36 18% 93%;
+  --muted-foreground: 30 8% 42%;
+  --accent: 42 26% 90%;
+  --accent-foreground: 30 12% 18%;
+  --destructive: 7 72% 40%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 35 14% 84%;
+  --input: 35 14% 84%;
+  --ring: 30 12% 18%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family:
+    "Geist Sans", "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial,
+    sans-serif;
+  font-feature-settings:
+    "ss01" 1,
+    "tnum" 1;
+}
+
+::selection {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.workbench-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+
+.workbench-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.workbench-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 999px;
+}

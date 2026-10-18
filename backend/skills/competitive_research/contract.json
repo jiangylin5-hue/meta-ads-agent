@@ -1,0 +1,87 @@
+{
+    "schema_version": "1.0",
+    "id": "competitive_research",
+    "version": "0.1.0",
+    "status": "draft",
+    "description": "Research public Meta Ad Library ads and report observed creative patterns as observations or hypotheses.",
+    "when_to_use": [
+        "competitor ads",
+        "Ad Library search",
+        "creative themes, formats, and CTAs"
+    ],
+    "do_not_use": [
+        "private account performance claims",
+        "scraping or browser automation",
+        "treating ad longevity as proven performance"
+    ],
+    "advertiser_job": {
+        "default": "other",
+        "alternatives": []
+    },
+    "required_inputs": [
+        "search terms or page ids",
+        "countries"
+    ],
+    "optional_inputs": [
+        "active status",
+        "ad type",
+        "limit"
+    ],
+    "read_groups": [
+        "R-PUBLIC"
+    ],
+    "optional_read_groups": [],
+    "draft_groups": [],
+    "required_evidence": [
+        "search criteria",
+        "countries",
+        "active status",
+        "observed_at",
+        "returned ads and creative metadata"
+    ],
+    "output_contract": {
+        "id": "competitive_observation_v1",
+        "required_fields": [
+            "facts",
+            "hypotheses",
+            "missing_data"
+        ],
+        "decision_modes": []
+    },
+    "hard_rules": [
+        "Use ads_library_search only; do not install scrapers or connectors.",
+        "Do not claim competitor spend, sales, or exact performance.",
+        "Separate observed creative from inferred strategy.",
+        "Ad duration is not proof of profitability."
+    ],
+    "source_refs": [
+        {
+            "repo": "AgriciDaniel/claude-ads",
+            "commit": "fc3908e786c318776df89a3a098333da377364be",
+            "path": "skills/ads-competitor/SKILL.md",
+            "scope": "Meta Ad Library and competitor creative research"
+        },
+        {
+            "repo": "coreyhaines31/marketingskills",
+            "commit": "365b412152b9542499ca1439426f7fc3cc92bb65",
+            "path": "skills/ads/SKILL.md",
+            "scope": "Ad Library research reference and structured observation only"
+        }
+    ],
+    "notes": [],
+    "input_gates": {
+        "search_terms_or_page_ids": true,
+        "countries": true,
+        "date_window": false,
+        "entity_level": false
+    },
+    "evidence_gates": {
+        "min_reads": 1
+    },
+    "evidence_requirements": {
+        "required_fields": [
+            "source_tools"
+        ],
+        "required_any_tools": []
+    }
+}

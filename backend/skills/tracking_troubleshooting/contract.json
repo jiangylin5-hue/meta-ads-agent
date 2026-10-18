@@ -1,0 +1,126 @@
+{
+    "schema_version": "1.0",
+    "id": "tracking_troubleshooting",
+    "version": "0.1.0",
+    "status": "draft",
+    "description": "Diagnose Meta Pixel, CAPI, dataset, EMQ, attribution, delivery, and event mapping problems from current tool evidence.",
+    "when_to_use": [
+        "Pixel did not fire",
+        "CAPI or EMQ issue",
+        "conversion count mismatch",
+        "delivery blocked by tracking or account state"
+    ],
+    "do_not_use": [
+        "claiming tracking is healthy with missing data",
+        "live Pixel rule changes without approval",
+        "performance diagnosis without checking tracking"
+    ],
+    "advertiser_job": {
+        "default": "fix_ads_not_running",
+        "alternatives": [
+            "set_up_and_fix_ad_account"
+        ]
+    },
+    "required_inputs": [
+        "ad_account_id",
+        "problem statement",
+        "date window"
+    ],
+    "optional_inputs": [
+        "dataset id",
+        "pixel id",
+        "event name",
+        "expected conversion definition",
+        "landing page URL"
+    ],
+    "read_groups": [
+        "R-ACCOUNT",
+        "R-PERF",
+        "R-TRACK",
+        "R-HELP"
+    ],
+    "optional_read_groups": [
+        "R-CATALOG"
+    ],
+    "draft_groups": [
+        "D-TRACK"
+    ],
+    "required_evidence": [
+        "dataset identity and status",
+        "event volume",
+        "EMQ and match keys",
+        "freshness",
+        "browser versus server source",
+        "pixel rules or parameters",
+        "delivery errors",
+        "missing data"
+    ],
+    "output_contract": {
+        "id": "tracking_finding_v1",
+        "required_fields": [
+            "facts",
+            "hypotheses",
+            "missing_data",
+            "decision"
+        ],
+        "decision_modes": [
+            "HOLD",
+            "FIX",
+            "TEST",
+            "INVESTIGATE"
+        ]
+    },
+    "hard_rules": [
+        "Never write tracking normal when dataset quality or volume is missing.",
+        "ads_get_dataset_stats accepts at most 28 days.",
+        "ads_get_errors does not cover disabled accounts or ad rejection.",
+        "Tracking changes require a separate draft and approval."
+    ],
+    "source_refs": [
+        {
+            "repo": "AgriciDaniel/claude-ads",
+            "commit": "fc3908e786c318776df89a3a098333da377364be",
+            "path": "skills/ads-server-side-tracking/SKILL.md",
+            "scope": "CAPI, event taxonomy, deduplication, consent, and EMQ"
+        },
+        {
+            "repo": "AgriciDaniel/claude-ads",
+            "commit": "fc3908e786c318776df89a3a098333da377364be",
+            "path": "skills/ads-meta/SKILL.md",
+            "scope": "Meta Pixel, CAPI, and attribution section"
+        },
+        {
+            "repo": "coreyhaines31/marketingskills",
+            "commit": "365b412152b9542499ca1439426f7fc3cc92bb65",
+            "path": "skills/analytics/SKILL.md",
+            "scope": "Event and UTM tracking rules"
+        },
+        {
+            "repo": "coreyhaines31/marketingskills",
+            "commit": "365b412152b9542499ca1439426f7fc3cc92bb65",
+            "path": "skills/attribution/SKILL.md",
+            "scope": "Attribution comparison and reconciliation"
+        },
+        {
+            "repo": "coreyhaines31/marketingskills",
+            "commit": "365b412152b9542499ca1439426f7fc3cc92bb65",
+            "path": "skills/ads/SKILL.md",
+            "scope": "Meta conversion tracking and setup sections only"
+        }
+    ],
+    "notes": [],
+    "input_gates": {
+        "account": true,
+        "date_window": true,
+        "entity_level": false
+    },
+    "evidence_gates": {
+        "min_reads": 1
+    },
+    "evidence_requirements": {
+        "required_fields": [
+            "source_tools"
+        ],
+        "required_any_tools": []
+    }
+}

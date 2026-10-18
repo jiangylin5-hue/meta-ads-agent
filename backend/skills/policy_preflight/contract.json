@@ -1,0 +1,106 @@
+{
+    "schema_version": "1.0",
+    "id": "policy_preflight",
+    "version": "0.1.0",
+    "status": "draft",
+    "description": "Review Meta ad copy, creative, category, and destination for policy risk; never claim policy approval.",
+    "when_to_use": [
+        "before launch",
+        "policy-risk review",
+        "ad disapproval analysis",
+        "ad and landing-page message match"
+    ],
+    "do_not_use": [
+        "claiming Meta approval",
+        "replacing legal review",
+        "using remembered policy rules as current fact"
+    ],
+    "advertiser_job": {
+        "default": "other",
+        "alternatives": []
+    },
+    "required_inputs": [
+        "ad copy or creative ids",
+        "advertiser and product context",
+        "special ad category"
+    ],
+    "optional_inputs": [
+        "country",
+        "targeting summary",
+        "destination URL",
+        "creative preview"
+    ],
+    "read_groups": [
+        "R-ACCOUNT",
+        "R-CREATIVE",
+        "R-HELP"
+    ],
+    "optional_read_groups": [
+        "R-PERF"
+    ],
+    "draft_groups": [],
+    "required_evidence": [
+        "ad copy and creative context",
+        "special category",
+        "target geography",
+        "policy source or user-provided policy text",
+        "observed_at",
+        "missing data"
+    ],
+    "output_contract": {
+        "id": "policy_risk_v1",
+        "required_fields": [
+            "facts",
+            "risks",
+            "missing_data",
+            "verdict"
+        ],
+        "decision_modes": [
+            "PASS",
+            "FIX REQUIRED",
+            "BLOCK",
+            "UNKNOWN"
+        ]
+    },
+    "hard_rules": [
+        "Current MCP cannot fetch complete Meta policy pages or landing-page HTML.",
+        "ads_get_help_article is a help lookup, not policy approval.",
+        "Cite policy text only when it was actually supplied or retrieved.",
+        "Meta review remains the final gate."
+    ],
+    "source_refs": [
+        {
+            "repo": "gooseworks-ai/goose-skills",
+            "commit": "70f3da5dc1ac1a8f6ede628733008643063624de",
+            "path": "skills/ads/composites/meta-ad-policy-checker/SKILL.md",
+            "scope": "Meta policy risk methodology; runtime policy fetch unavailable"
+        },
+        {
+            "repo": "gooseworks-ai/goose-skills",
+            "commit": "70f3da5dc1ac1a8f6ede628733008643063624de",
+            "path": "skills/ads/composites/ad-to-landing-page-auditor/SKILL.md",
+            "scope": "Ad-to-landing-page message-match rules"
+        },
+        {
+            "repo": "AgriciDaniel/claude-ads",
+            "commit": "fc3908e786c318776df89a3a098333da377364be",
+            "path": "skills/ads-meta/SKILL.md",
+            "scope": "Meta policy and compliance section"
+        }
+    ],
+    "notes": [
+        "Do not rename UNKNOWN to PASS when policy text or destination content is unavailable."
+    ],
+    "input_gates": {
+        "account": false,
+        "date_window": false,
+        "entity_level": false
+    },
+    "evidence_gates": {
+        "min_reads": 0
+    },
+    "evidence_requirements": {
+        "required_fields": [],
+        "required_any_tools": []
+    }
+}

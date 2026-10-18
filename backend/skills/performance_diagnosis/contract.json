@@ -1,0 +1,129 @@
+{
+    "schema_version": "1.0",
+    "id": "performance_diagnosis",
+    "version": "0.1.0",
+    "status": "draft",
+    "description": "Explain Meta performance changes using evaluation level, learning state, marginal efficiency, change history, and evidence.",
+    "when_to_use": [
+        "CPA, ROAS, CTR, CPM, or conversion change",
+        "which entity is dragging performance",
+        "learning phase or creative fatigue question",
+        "wasted spend question"
+    ],
+    "do_not_use": [
+        "simple current-state lookup",
+        "action execution",
+        "policy approval"
+    ],
+    "advertiser_job": {
+        "default": "explain_poor_results",
+        "alternatives": [
+            "assess_and_optimize_performance"
+        ]
+    },
+    "required_inputs": [
+        "ad_account_id",
+        "current date window",
+        "entity level"
+    ],
+    "optional_inputs": [
+        "comparison window",
+        "entity ids",
+        "creative ids",
+        "dataset id"
+    ],
+    "read_groups": [
+        "R-ACCOUNT",
+        "R-PERF"
+    ],
+    "optional_read_groups": [
+        "R-TRACK",
+        "R-CREATIVE"
+    ],
+    "draft_groups": [],
+    "required_evidence": [
+        "current and comparison windows",
+        "evaluation level",
+        "learning state",
+        "sample size",
+        "change history",
+        "delivery errors",
+        "missing data"
+    ],
+    "output_contract": {
+        "id": "performance_finding_v1",
+        "required_fields": [
+            "facts",
+            "hypotheses",
+            "missing_data",
+            "decision"
+        ],
+        "decision_modes": [
+            "HOLD",
+            "FIX",
+            "TEST",
+            "INVESTIGATE"
+        ]
+    },
+    "hard_rules": [
+        "Inspect next_actions from ads_get_ad_entities before answering.",
+        "ads_insights_performance_trend supports AD and ADSET only; use ads_get_ad_entities with time_increment for Campaign trends.",
+        "Separate observations, causes, and hypotheses.",
+        "Do not recommend a mutation without an explicit user request."
+    ],
+    "source_refs": [
+        {
+            "repo": "gooseworks-ai/goose-skills",
+            "commit": "70f3da5dc1ac1a8f6ede628733008643063624de",
+            "path": "skills/ads/composites/meta-ads-analyzer/SKILL.md",
+            "scope": "Meta evaluation levels, learning phase, marginal efficiency, auction overlap, creative fatigue"
+        },
+        {
+            "repo": "gooseworks-ai/goose-skills",
+            "commit": "70f3da5dc1ac1a8f6ede628733008643063624de",
+            "path": "skills/ads/composites/ad-campaign-analyzer/SKILL.md",
+            "scope": "Meta performance, waste, and budget-transfer portion only"
+        },
+        {
+            "repo": "coreyhaines31/marketingskills",
+            "commit": "365b412152b9542499ca1439426f7fc3cc92bb65",
+            "path": "skills/ads/references/operating-check.md",
+            "scope": "Ordered performance check and decision language"
+        },
+        {
+            "repo": "coreyhaines31/marketingskills",
+            "commit": "365b412152b9542499ca1439426f7fc3cc92bb65",
+            "path": "skills/ads/references/audit-guardrails.md",
+            "scope": "Unknown, sample, and recommendation guardrails"
+        },
+        {
+            "repo": "AgriciDaniel/claude-ads",
+            "commit": "fc3908e786c318776df89a3a098333da377364be",
+            "path": "skills/ads-monitor/SKILL.md",
+            "scope": "Monitoring and change interpretation"
+        }
+    ],
+    "notes": [
+        "MS meta-decision-system is used only as a conditional reference when business_model is B2B_LEAD_GEN and downstream lead quality is available."
+    ],
+    "input_gates": {
+        "account": true,
+        "date_window": true,
+        "entity_level": true
+    },
+    "evidence_gates": {
+        "min_reads": 1
+    },
+    "evidence_requirements": {
+        "required_fields": [
+            "source_tools",
+            "comparison_window",
+            "sample_size",
+            "learning_state"
+        ],
+        "required_any_tools": [
+            "ads_get_ad_entities",
+            "ads_insights_performance_trend"
+        ]
+    }
+}

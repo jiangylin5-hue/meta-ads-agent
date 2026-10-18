@@ -1,0 +1,18 @@
+export const copy = {
+  appName: "AI Media Buyer",
+  appSubtitle: "读取真实 Meta 数据，给出短判断、证据和待审批动作。",
+  workspace: "Workspace",
+  trace: "Agent Trace",
+  dashboard: "Dashboard",
+  audit: "Audit",
+  drafts: "Drafts",
+  currentAccount: "当前广告账户",
+  noAccount: "尚未选择账户",
+  connectMeta: "连接 Facebook",
+  refreshAccounts: "刷新账户",
+  askPlaceholder: "问一个投手问题，例如：今天这个账户怎么样？哪些广告该停？",
+  send: "发送",
+  loadingConfig: "读取配置中",
+  loadingMeta: "检查 Meta 连接",
+  quickTasks: ["今天这个账户怎么样？", "找一下浪费预算的地方", "这个广告该停吗？", "生成一份审计报告"],
+};
