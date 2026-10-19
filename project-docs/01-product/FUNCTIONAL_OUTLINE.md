@@ -54,7 +54,7 @@ The workspace shows:
 
 ## Approval And Execution
 
-`ads_create_campaign`, `ads_create_ad_set`, `ads_create_ad`, and `ads_create_creative` create non-live Meta Draft Mode objects directly. Activation, updates, deletes, and publication remain blocked. Other write-like tools stage local approval records.
+New Draft creation requires a plan-first response and explicit `确认创建草稿` confirmation. The four create tools then create non-live Meta Draft Mode objects. `ads_update_entity` can edit or delete a Draft only with `draft_only=true` and fresh Draft readback; creative/link changes use replacement Creative and Ad objects. Activation and publication remain blocked.
 
 The execute endpoint returns `410 execution_disabled_in_demo`. There is no Execute button in the UI.
 

@@ -70,7 +70,8 @@ def test_mcp_native_tool_surface_is_code_enforced() -> None:
         assert name in tools
     assert "DIRECT_DRAFT_CREATE_TOOLS" in tools
     assert "FORBIDDEN_PUBLISH_TOOLS" in tools
-    assert "forwards only the four draft creation tools to mcp" in agents.lower()
+    assert "draft_only" in agents
+    assert "确认创建草稿" in agents
     assert "ads_activate_entity" in agents
 
 def test_official_meta_mcp_is_the_configured_provider() -> None:

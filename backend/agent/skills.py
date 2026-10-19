@@ -54,7 +54,7 @@ class SkillCatalog:
         self.tool_groups: dict[str, dict[str, list[str]]] = {}
         self.contracts: dict[str, dict[str, Any]] = {}
         self.skill_docs: dict[str, dict[str, Any]] = {}
-        self.max_loaded_skills = 4
+        self.max_loaded_skills = 8
         self.max_loaded_references = 6
         self.max_reference_chars = 6000
         self._load()
@@ -68,7 +68,7 @@ class SkillCatalog:
             "read": {str(key): list(value) for key, value in (groups.get("read_groups") or {}).items()},
             "draft": {str(key): list(value) for key, value in (groups.get("draft_groups") or {}).items()},
         }
-        self.max_loaded_skills = self._bounded_int(groups.get("max_loaded_skills"), 4, 1)
+        self.max_loaded_skills = self._bounded_int(groups.get("max_loaded_skills"), 8, 1)
         self.max_loaded_references = self._bounded_int(groups.get("max_loaded_references"), 6, 1)
         self.max_reference_chars = self._bounded_int(groups.get("max_reference_chars"), 6000, 500)
         for skill_id in SKILL_ORDER:
@@ -123,7 +123,7 @@ class SkillCatalog:
 
     def catalog_text(self) -> str:
         lines = [
-            "Available project skills (closed menu). Call load_skill before Meta tools; load at most four skills.",
+            "Available project skills (closed menu). Call load_skill before Meta tools; load at most eight skills.",
             "Choose by the task description, then use only the tool groups and references returned by load_skill.",
         ]
         lines.extend(f"- {entry['id']}: {entry['description']}" for entry in self.catalog_entries())

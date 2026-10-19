@@ -45,3 +45,16 @@ def test_secret_fingerprint_does_not_expose_secret() -> None:
     assert "suffix" not in fingerprint
     assert fingerprint["sha256_8"]
     assert "example-secret" not in str(fingerprint)
+
+
+def test_ga4_enabled_requires_existing_credentials_file(tmp_path, monkeypatch) -> None:
+    credentials = tmp_path / "service-account.json"
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(credentials))
+    monkeypatch.setenv("GOOGLE_PROJECT_ID", "test-project")
+    monkeypatch.setenv("GA4_PROPERTY_ID", "123456789")
+
+    assert config.ga4_enabled() is False
+    credentials.write_text("{}", encoding="utf-8")
+    assert config.ga4_enabled() is True
+    assert config.ga4_project_id() == "test-project"
+    assert config.ga4_default_property_id() == "123456789"

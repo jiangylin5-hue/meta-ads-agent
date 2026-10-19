@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from queue import Empty, Queue
+from threading import Thread
 from time import monotonic
 from typing import Any, Callable, Protocol
 
-from ..config import active_llm_model, active_llm_provider, agent_max_steps, agent_turn_timeout_seconds, openai_api_key, openai_model, openai_reasoning_effort, openai_timeout_seconds
+from ..config import active_llm_model, active_llm_provider, agent_max_steps, agent_turn_timeout_seconds, ga4_enabled, openai_api_key, openai_model, openai_reasoning_effort, openai_timeout_seconds
 from .deepseek import DeepSeekChatClient
 from .context import (
     ContextAssembler,
@@ -20,8 +22,9 @@ from .policy import ensure_tool_allowed
 from .prompts import SYSTEM_PROMPT
 from .skills import SkillCatalog, SkillCatalogError
 from .state import AgentState
-from .tools import MetaToolRegistry, _draft_target, is_direct_draft_create_tool, is_write_tool
+from .tools import MetaToolRegistry, _draft_target, is_direct_draft_create_tool, is_direct_draft_mutation_tool, is_write_tool
 from ..services.account_cache import MCPToolResultCache
+from ..services.ga4_gateway import Ga4Gateway
 from ..services.long_term_memory import validate_memory_tool_args
 from ..services.task_state import validate_task_update
 
@@ -161,6 +164,95 @@ def _ask_user_tool() -> dict[str, Any]:
         },
     }
 
+
+def _complete_model_with_deadline(
+    llm: LLMClient,
+    instructions: str,
+    input_items: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    *,
+    timeout_seconds: float,
+    on_event: TurnEventHandler | None,
+    step: int,
+    event_context: str,
+) -> dict[str, Any]:
+    timeout = max(0.1, float(timeout_seconds))
+    provider = active_llm_provider()
+    model = active_llm_model()
+    _emit_event(
+        on_event,
+        "model.started",
+        {
+            "step": step,
+            "context": event_context,
+            "provider": provider,
+            "model": model,
+            "input_item_count": len(input_items),
+            "tool_count": len(tools),
+        },
+    )
+    started = monotonic()
+    result_queue: Queue[tuple[str, Any]] = Queue(maxsize=1)
+
+    def worker() -> None:
+        try:
+            result_queue.put(("ok", llm.complete(instructions, input_items, tools, timeout_seconds=timeout)))
+        except BaseException as exc:
+            result_queue.put(("error", exc))
+
+    thread = Thread(target=worker, name=f"model-{event_context}-{step}", daemon=True)
+    thread.start()
+    try:
+        status, payload = result_queue.get(timeout=timeout)
+    except Empty as exc:
+        _emit_event(
+            on_event,
+            "model.failed",
+            {
+                "step": step,
+                "context": event_context,
+                "provider": provider,
+                "model": model,
+                "reason": "hard_timeout",
+                "timeout_seconds": timeout,
+                "duration_ms": int((monotonic() - started) * 1000),
+            },
+        )
+        raise AgentTimeoutError("Model provider did not respond before the turn deadline.") from exc
+    if status == "error":
+        error = payload
+        _emit_event(
+            on_event,
+            "model.failed",
+            {
+                "step": step,
+                "context": event_context,
+                "provider": provider,
+                "model": model,
+                "reason": type(error).__name__,
+                "duration_ms": int((monotonic() - started) * 1000),
+            },
+        )
+        raise error
+    response = payload if isinstance(payload, dict) else {}
+    usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
+    _emit_event(
+        on_event,
+        "model.finished",
+        {
+            "step": step,
+            "context": event_context,
+            "provider": provider,
+            "model": model,
+            "duration_ms": int((monotonic() - started) * 1000),
+            "tool_call_count": len(response.get("tool_calls") or []),
+            "content_chars": len(str(response.get("content") or "")),
+            "finish_reason": str(response.get("finish_reason") or ""),
+            "usage": usage,
+        },
+    )
+    return response
+
 def _responses_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
     output: list[dict[str, Any]] = []
     for item in tools:
@@ -214,7 +306,10 @@ class AgentRuntime:
         turn_timeout_seconds: float | None = None,
     ) -> None:
         try:
-            self.tools = tools or MetaToolRegistry(result_cache=MCPToolResultCache())
+            self.tools = tools or MetaToolRegistry(
+                result_cache=MCPToolResultCache(),
+                ga4_gateway=Ga4Gateway() if ga4_enabled() else None,
+            )
         except Exception as exc:
             raise AgentRuntimeError(
                 f"MCP tool discovery failed: {type(exc).__name__}: {exc}",
@@ -251,6 +346,7 @@ class AgentRuntime:
         session_id: str = "",
         task_id: str = "",
         user_message_id: str = "",
+        draft_creation_authorized: bool = False,
         on_event: TurnEventHandler | None = None,
     ) -> dict[str, Any]:
         deadline = monotonic() + self.turn_timeout_seconds
@@ -278,7 +374,7 @@ class AgentRuntime:
         summary_update = dict(summary or {})
         if older:
             self._check_deadline(deadline)
-            summary_update = self._summarize_history(older, summary_update, self._remaining_seconds(deadline))
+            summary_update = self._summarize_history(older, summary_update, self._remaining_seconds(deadline), on_event)
         state.summary_update = summary_update
         portable_tools = not bool(getattr(self.llm, "supports_tool_search", True))
         base_instructions = "\n\n".join(
@@ -333,17 +429,21 @@ class AgentRuntime:
             self._check_deadline(deadline)
             state.step = step
             _emit_event(on_event, "step.started", {"step": step, "max_steps": self.max_steps})
-            input_items = compact_tool_outputs(input_items, call_kinds)
+            input_items = compact_tool_outputs(input_items, call_kinds, deadline=deadline)
             if portable_tools:
                 allowed_tools = self.skills.allowed_tools(state.loaded_skills)
                 tool_schemas = self.tools.portable_schemas(allowed_tools) + [_ask_user_tool(), *local_tool_schemas]
                 state.context_manifest["tool_schema_tokens"] = estimate_tokens(tool_schemas)
                 state.context_manifest["portable_tool_count"] = len(tool_schemas)
-            response = self.llm.complete(
+            response = _complete_model_with_deadline(
+                self.llm,
                 instructions,
                 input_items,
                 tool_schemas,
                 timeout_seconds=self._remaining_seconds(deadline),
+                on_event=on_event,
+                step=step,
+                event_context="turn",
             )
             self._check_deadline(deadline)
             usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
@@ -399,7 +499,7 @@ class AgentRuntime:
                             result = self.tools.execute(name, arguments)
                         else:
                             allowed_tools = self.skills.allowed_tools(state.loaded_skills)
-                            if name not in allowed_tools:
+                            if name not in allowed_tools and not self.tools.is_core_tool(name):
                                 raise PermissionError(
                                     "Tool is outside the loaded skill scope. Call load_skill for a relevant skill first."
                                 )
@@ -411,49 +511,68 @@ class AgentRuntime:
                                     "missing_inputs": missing_inputs,
                                 }
                             elif is_write_tool(name):
-                                draft_errors = _draft_evidence_errors(name, arguments, state)
-                                verified_state: dict[str, Any] | None = None
-                                state_errors: list[str] = []
-                                if not draft_errors:
-                                    verified_state, state_errors = _verified_optimization_current_state(
-                                        name,
-                                        arguments,
-                                        state,
-                                    )
-                                if draft_errors or state_errors:
+                                if is_direct_draft_create_tool(name) and not draft_creation_authorized:
                                     result = {
-                                        "error": "Draft evidence is incomplete.",
-                                        "missing_evidence": sorted(set([*draft_errors, *state_errors])),
+                                        "error": "New Draft creation requires explicit user confirmation.",
+                                        "confirmation_required": True,
+                                        "confirmation_phrase": "确认创建草稿",
                                     }
                                 else:
-                                    if verified_state is not None:
-                                        arguments = {**arguments, "current_state": verified_state}
-                                    if is_direct_draft_create_tool(name):
-                                        created = self.tools.create_paused_draft(name, arguments)
-                                        if isinstance(created, dict) and created.get("created"):
-                                            state.direct_drafts.append(created)
-                                        result = created
+                                    draft_errors = _draft_evidence_errors(name, arguments, state)
+                                    mutation_requested = is_direct_draft_mutation_tool(name) and bool(arguments.get("draft_only"))
+                                    mutation_errors = (
+                                        _draft_mutation_evidence_errors(name, arguments, state)
+                                        if mutation_requested
+                                        else []
+                                    )
+                                    verified_state: dict[str, Any] | None = None
+                                    state_errors: list[str] = []
+                                    if not draft_errors and not mutation_errors and not mutation_requested:
+                                        verified_state, state_errors = _verified_optimization_current_state(
+                                            name,
+                                            arguments,
+                                            state,
+                                        )
+                                    validation_errors = sorted(set([*draft_errors, *mutation_errors, *state_errors]))
+                                    if validation_errors:
+                                        result = {
+                                            "error": "Draft evidence is incomplete.",
+                                            "missing_evidence": validation_errors,
+                                        }
                                     else:
-                                        staged = self.tools.stage_write(name, arguments)
-                                        if isinstance(staged, dict) and not staged.get("error"):
-                                            staged_id = f"staged_{len(state.staged_actions) + 1}"
-                                            staged["staged_action_id"] = staged_id
-                                            state.staged_actions.append(staged)
-                                            result = {
-                                                "staged_action_id": staged_id,
-                                                "status": "staged",
-                                                "tool": name,
-                                                "target_level": staged.get("target_level"),
-                                                "target_id": staged.get("target_id"),
-                                                "target_name": staged.get("target_name"),
-                                            }
+                                        if verified_state is not None:
+                                            arguments = {**arguments, "current_state": verified_state}
+                                        if mutation_requested:
+                                            updated = self.tools.mutate_draft(name, arguments)
+                                            if isinstance(updated, dict) and not updated.get("error"):
+                                                state.direct_draft_mutations.append(updated)
+                                            result = updated
+                                        elif is_direct_draft_create_tool(name):
+                                            created = self.tools.create_paused_draft(name, arguments)
+                                            if isinstance(created, dict) and created.get("created"):
+                                                state.direct_drafts.append(created)
+                                            result = created
                                         else:
-                                            result = staged
+                                            staged = self.tools.stage_write(name, arguments)
+                                            if isinstance(staged, dict) and not staged.get("error"):
+                                                staged_id = f"staged_{len(state.staged_actions) + 1}"
+                                                staged["staged_action_id"] = staged_id
+                                                state.staged_actions.append(staged)
+                                                result = {
+                                                    "staged_action_id": staged_id,
+                                                    "status": "staged",
+                                                    "tool": name,
+                                                    "target_level": staged.get("target_level"),
+                                                    "target_id": staged.get("target_id"),
+                                                    "target_name": staged.get("target_name"),
+                                                }
+                                            else:
+                                                result = staged
                             else:
                                 result = self.tools.execute(name, arguments)
                                 if isinstance(result, dict) and result.get("tool") and not result.get("error") and not result.get("draft_id"):
                                     state.read_tools.append(name)
-                                    if not (isinstance(result.get("_cache"), dict) and result["_cache"].get("hit")):
+                                    if not self.tools.is_core_tool(name) and not (isinstance(result.get("_cache"), dict) and result["_cache"].get("hit")):
                                         state.live_read_tools.append(name)
                                         state.live_read_evidence.append(
                                             _build_live_read_evidence(
@@ -630,14 +749,19 @@ class AgentRuntime:
         older_messages: list[dict[str, Any]],
         existing_summary: dict[str, Any],
         timeout_seconds: float,
+        on_event: TurnEventHandler | None = None,
     ) -> dict[str, Any]:
         instructions, payload = summary_prompt(existing_summary, older_messages)
         try:
-            response = self.llm.complete(
+            response = _complete_model_with_deadline(
+                self.llm,
                 instructions,
                 [{"role": "user", "content": payload}],
                 [],
                 timeout_seconds=timeout_seconds,
+                on_event=on_event,
+                step=0,
+                event_context="conversation_summary",
             )
             return parse_summary_response(str(response.get("content") or ""), existing_summary, older_messages)
         except Exception:
@@ -907,6 +1031,8 @@ def _evidence_gate_errors(state: AgentState, skill_results: dict[str, Any]) -> l
 _LIVE_READ_ID_KEYS = {
     "id",
     "entity_id",
+    "ad_object_id",
+    "parent_ad_object_id",
     "campaign_id",
     "ad_set_id",
     "adset_id",
@@ -937,6 +1063,7 @@ def _build_live_read_evidence(
     return {
         "tool": name,
         "account_id": account_id,
+        "object_state": str(arguments.get("object_state") or "live").strip().lower() or "live",
         "target_ids": sorted(item for item in target_ids if item),
         "states_by_target": _collect_entity_states(raw_result),
         "date_window": {
@@ -975,6 +1102,8 @@ def _canonical_entity_id(value: str) -> str:
 
 _ENTITY_STATE_FIELDS = (
     "status",
+    "validation_status",
+    "action",
     "effective_status",
     "daily_budget",
     "lifetime_budget",
@@ -993,7 +1122,17 @@ def _collect_entity_states(value: Any, depth: int = 0) -> dict[str, dict[str, An
     states: dict[str, dict[str, Any]] = {}
     if isinstance(value, dict):
         entity_id = ""
-        for key in ("id", "entity_id", "campaign_id", "adset_id", "ad_set_id", "ad_id", "creative_id"):
+        for key in (
+            "id",
+            "entity_id",
+            "ad_object_id",
+            "campaign_id",
+            "adset_id",
+            "ad_set_id",
+            "ad_id",
+            "creative_id",
+            "ad_creative_id",
+        ):
             if value.get(key):
                 entity_id = _canonical_entity_id(str(value[key]))
                 break
@@ -1157,6 +1296,32 @@ def _verified_optimization_current_state(
         "learning_state": learning_state,
         "comparison_window": comparison_window,
     }, []
+
+
+def _draft_mutation_evidence_errors(name: str, arguments: dict[str, Any], state: AgentState) -> list[str]:
+    if not is_direct_draft_mutation_tool(name) or not bool(arguments.get("draft_only")):
+        return []
+    account_id = _canonical_entity_id(
+        str(arguments.get("ad_account_id") or arguments.get("account_id") or state.account_id or "")
+    )
+    target_level, target_key = _draft_target(name, arguments)
+    target_id = _canonical_entity_id(str(arguments.get(target_key) or ""))
+    if not target_id:
+        return [f"draft target {target_level} id"]
+    candidates = [
+        item
+        for item in state.live_read_evidence
+        if bool(item.get("force_refresh"))
+        and str(item.get("account_id") or "") == account_id
+        and str(item.get("object_state") or "") == "draft"
+        and target_id in set(item.get("target_ids") or [])
+    ]
+    if not candidates:
+        return [f"draft read with object_state=draft and force_refresh=true for draft target {target_level}:{target_id}"]
+    status = str((candidates[-1].get("states_by_target") or {}).get(target_id, {}).get("status") or "").upper()
+    if status not in {"EDITING", "VALIDATED"}:
+        return [f"draft target {target_level}:{target_id} must have status EDITING or VALIDATED"]
+    return []
 
 
 def _draft_evidence_errors(name: str, arguments: dict[str, Any], state: AgentState) -> list[str]:
@@ -1337,7 +1502,7 @@ def _load_skill_tool(entries: list[dict[str, str]]) -> dict[str, Any]:
     return {
         "type": "function",
         "name": "load_skill",
-        "description": "Load one or more project skills from the closed catalog. Call before Meta tools; at most four skills per turn.",
+        "description": "Load one or more project skills from the closed catalog. Call before Meta tools; at most eight skills per turn.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -1345,7 +1510,7 @@ def _load_skill_tool(entries: list[dict[str, str]]) -> dict[str, Any]:
                 "skill_ids": {
                     "type": "array",
                     "items": {"type": "string", "enum": skill_ids},
-                    "maxItems": 4,
+                    "maxItems": 8,
                     "description": "Batch form for multi-intent requests. Use one or more ids.",
                 },
                 "reason": {"type": "string", "description": "Short reason these skills fit the request."},
@@ -1424,6 +1589,7 @@ def _result(state: AgentState, reply: str, stopped_reason: str) -> dict[str, Any
         "trace": state.trace,
         "drafts": state.drafts,
         "direct_drafts": state.direct_drafts,
+        "direct_draft_mutations": state.direct_draft_mutations,
         "tool_calls": tools_used,
         "skills_loaded": skills_loaded,
         "references_loaded": references_loaded,
@@ -1499,7 +1665,7 @@ def _compact_result(result: Any) -> dict[str, Any]:
         return {"preview": _compact_value(result)}
     if "error" in result:
         payload = {"error": _safe_short_text(str(result["error"]), 500)}
-        for key in ("missing_inputs", "missing_evidence", "missing_fields", "invalid_fields", "missing_conflicts", "schema_errors"):
+        for key in ("missing_inputs", "missing_evidence", "missing_fields", "invalid_fields", "missing_conflicts", "schema_errors", "confirmation_required", "confirmation_phrase"):
             if key in result:
                 payload[key] = _compact_value(result[key])
         return payload

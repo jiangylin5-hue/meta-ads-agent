@@ -3,13 +3,14 @@ from __future__ import annotations
 import json
 import math
 import re
+from time import monotonic
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
 
-DEFAULT_INPUT_TOKEN_BUDGET = 36_000
-DEFAULT_OUTPUT_TOKEN_RESERVE = 4_000
+DEFAULT_INPUT_TOKEN_BUDGET = 256_000
+DEFAULT_OUTPUT_TOKEN_RESERVE = 16_384
 DEFAULT_RECENT_ROUNDS = 5
 DEFAULT_COMPRESSION_RATIO = 0.8
 HISTORY_TOKEN_BUDGET = 8_000
@@ -17,8 +18,8 @@ SUMMARY_TOKEN_BUDGET = 2_000
 MEMORY_TOKEN_BUDGET = 2_000
 TASK_TOKEN_BUDGET = 2_500
 ACCOUNT_TOKEN_BUDGET = 2_000
-SKILL_TOKEN_BUDGET = 5_000
-OBSERVATION_TOKEN_BUDGET = 12_000
+SKILL_TOKEN_BUDGET = 10_000
+OBSERVATION_TOKEN_BUDGET = 96_000
 MAX_RECENT_MESSAGE_TOKENS = 2_400
 
 _CJK_RE = re.compile(r"[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]")
@@ -206,7 +207,7 @@ def skill_context_text(active_skills: list[dict[str, Any]] | None, max_tokens: i
     if not rows:
         return ""
     parts = ["Active project Skills for this task (full instructions):"]
-    for item in rows[:4]:
+    for item in rows[:8]:
         name = str(item.get("name") or "unknown")
         parts.append(f"\n### Skill: {name}\n{str(item.get('instructions') or '').strip()}")
     text = "\n".join(parts)
@@ -367,8 +368,18 @@ def compact_tool_outputs(
     *,
     keep_recent_mcp: int = 3,
     max_tokens: int = OBSERVATION_TOKEN_BUDGET,
+    deadline: float | None = None,
+    max_iterations: int = 64,
 ) -> list[dict[str, Any]]:
-    """Bound accumulated tool observations while preserving call ids."""
+    """Bound accumulated tool observations without re-compacting the same item."""
+    function_outputs = [
+        str(item.get("output") or "")
+        for item in input_items
+        if item.get("type") == "function_call_output"
+    ]
+    if estimate_tokens(function_outputs) <= max_tokens:
+        return input_items
+
     mcp_positions = [
         index
         for index, item in enumerate(input_items)
@@ -392,10 +403,27 @@ def compact_tool_outputs(
             "note": "Older tool observation compacted; use the task tool ledger for prior structured parameters.",
         }
         output.append({**item, "output": json.dumps(summary, ensure_ascii=False)})
-    while estimate_tokens([item.get("output", "") for item in output if item.get("type") == "function_call_output"]) > max_tokens:
-        candidates = [i for i, item in enumerate(output) if item.get("type") == "function_call_output" and i not in keep]
-        if not candidates:
+
+    candidates = [
+        index
+        for index, item in enumerate(output)
+        if item.get("type") == "function_call_output" and index not in keep
+    ]
+    total = estimate_tokens([item.get("output", "") for item in output if item.get("type") == "function_call_output"])
+    for target in candidates[: max(0, int(max_iterations))]:
+        if total <= max_tokens:
             break
-        target = candidates[0]
-        output[target] = {**output[target], "output": json.dumps({"context_compacted": True, "note": "Observation omitted from current-turn context."}, ensure_ascii=False)}
+        if deadline is not None and monotonic() >= deadline:
+            break
+        output[target] = {
+            **output[target],
+            "output": json.dumps(
+                {"context_compacted": True, "note": "Observation omitted from current-turn context."},
+                ensure_ascii=False,
+            ),
+        }
+        updated = estimate_tokens([item.get("output", "") for item in output if item.get("type") == "function_call_output"])
+        if updated >= total:
+            break
+        total = updated
     return output

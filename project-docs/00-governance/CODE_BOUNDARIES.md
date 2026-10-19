@@ -5,7 +5,7 @@
 - Document status: active architecture contract
 - Source of truth: [IMPLEMENTATION_SOURCE_OF_TRUTH.md](IMPLEMENTATION_SOURCE_OF_TRUTH.md)
 - Runtime reference: [AGENT_WORKFLOW.md](../02-architecture/AGENT_WORKFLOW.md)
-- Active stage: [STAGE_09_CONTEXT_AND_AGENT_MEMORY.md](../03-stages/STAGE_09_CONTEXT_AND_AGENT_MEMORY.md)
+- Active stage: private Stage 08 implementation history (not included)
 
 ## Backend Boundaries
 
@@ -71,7 +71,7 @@ Tool classes:
 ```text
 local:    ask_user, load_skill, read_skill_reference, submit_result, save_memory, update_task
 read:     any discovered MCP tool in an active Skill read group
-direct:   ads_create_campaign, ads_create_ad_set, ads_create_ad, ads_create_creative (MCP Draft Mode)
+direct:   ads_create_campaign, ads_create_ad_set, ads_create_ad, ads_create_creative; ads_update_entity with draft_only=true (MCP Draft Mode)
 draft:    other write-like MCP tools in an active Skill Draft group
 ```
 
@@ -90,7 +90,7 @@ update_ad_creative
 upload_ad_image
 ```
 
-Only `ads_create_campaign`, `ads_create_ad_set`, `ads_create_ad`, and `ads_create_creative` call MCP; they use Draft Mode and return non-live Draft objects. Other write-like tools become local drafts with evidence, recommendation, risk, lifecycle, and preflight. Activation and publication are rejected.
+Only `ads_create_campaign`, `ads_create_ad_set`, `ads_create_ad`, and `ads_create_creative`, plus `ads_update_entity` with `draft_only=true`, call MCP; they use Draft Mode and return non-live Draft objects. New creation requires explicit plan confirmation. Draft updates/deletes require fresh Draft readback. Other write-like tools become local drafts with evidence, recommendation, risk, lifecycle, and preflight. Activation and publication are rejected.
 
 The following are forbidden direct execution paths:
 

@@ -4,7 +4,7 @@ import re
 
 ROOT = Path(".")
 DOCS = ROOT / "project-docs"
-ACTIVE_STAGE = DOCS / "03-stages" / "STAGE_09_CONTEXT_AND_AGENT_MEMORY.md"
+ACTIVE_STAGE = DOCS / "03-stages" / "STAGE_10_GA4_MEASUREMENT_TOOLS.md"
 ACTIVE_DOCS = [
     ROOT / "README.md",
     ROOT / "AGENTS.md",
@@ -42,9 +42,9 @@ def test_active_stage_is_consistent() -> None:
     index = (DOCS / "README.md").read_text(encoding="utf-8")
     stage = ACTIVE_STAGE.read_text(encoding="utf-8")
 
-    assert "Active Stage: Stage 09 - Context And Agent Memory" in truth
-    assert "STAGE_09_CONTEXT_AND_AGENT_MEMORY.md" in truth
-    assert "Current active stage: [03-stages/STAGE_09_CONTEXT_AND_AGENT_MEMORY.md]" in index
+    assert "Active Stage: Stage 10 - GA4 Measurement Tools" in truth
+    assert "STAGE_10_GA4_MEASUREMENT_TOOLS.md" in truth
+    assert "Current active stage: [03-stages/STAGE_10_GA4_MEASUREMENT_TOOLS.md]" in index
     assert "Stage status: active" in stage
     assert "Current Progress" in stage
     assert "Verification" in stage

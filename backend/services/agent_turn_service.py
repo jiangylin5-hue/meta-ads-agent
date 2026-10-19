@@ -23,6 +23,7 @@ from .trace_service import append_trace, start_trace
 
 
 TurnEventHandler = Callable[[str, dict[str, Any]], None]
+DRAFT_CONFIRMATION_PHRASE = "确认创建草稿"
 
 
 @dataclass
@@ -111,22 +112,30 @@ class AgentTurnExecution:
                 }
 
         runtime = AgentRuntime()
+        task_context = task_for_context(self.task)
+        pending_confirmation = bool((task_context.get("progress") or {}).get("pending_draft_confirmation"))
         runtime_kwargs: dict[str, Any] = {
             "message": self.message,
             "history": self.prior_history,
             "account_id": self.request.account_id,
             "frontend_context": self.request.frontend_context,
             "summary": summary(self.state),
-            "task_state": task_for_context(self.task),
+            "task_state": task_context,
             "memories": memory_used,
             "account_context": account_context,
             "active_skill_ids": list(self.task.get("active_skill_ids") or []),
             "session_id": self.session_id,
             "task_id": str(self.task.get("id") or ""),
             "user_message_id": self.user_message_id,
+            "draft_creation_authorized": pending_confirmation and is_explicit_draft_confirmation(self.message),
         }
-        if on_event is not None:
-            runtime_kwargs["on_event"] = on_event
+        def emit_runtime_event(event_name: str, payload: dict[str, Any]) -> None:
+            if event_name.startswith("model."):
+                append_trace(self.trace_id, event_name, payload)
+            if on_event is not None:
+                on_event(event_name, payload)
+
+        runtime_kwargs["on_event"] = emit_runtime_event
         result = runtime.run_turn(**runtime_kwargs)
         return self._persist_result(result, memory_service, memory_used, account_context)
 
@@ -180,9 +189,20 @@ class AgentTurnExecution:
                 saved_memories = []
 
         stopped_reason = str(result.get("stopped_reason") or "")
+        task_update = dict(result.get("task_update") or {}) if isinstance(result.get("task_update"), dict) else {}
+        progress_update = dict(task_update.get("progress") or {}) if isinstance(task_update.get("progress"), dict) else {}
+        draft_objects_touched = bool(result.get("direct_drafts") or result.get("direct_draft_mutations"))
+        if draft_objects_touched:
+            progress_update["pending_draft_confirmation"] = False
+            progress_update.pop("draft_plan_summary", None)
+        elif "campaign_plan" in (result.get("skills_loaded") or []) and DRAFT_CONFIRMATION_PHRASE in reply:
+            progress_update["pending_draft_confirmation"] = True
+            progress_update["draft_plan_summary"] = reply[:2000]
+        if progress_update:
+            task_update["progress"] = progress_update
         task_after = self.task_service.apply_turn(
             self.task,
-            task_update=result.get("task_update") if isinstance(result.get("task_update"), dict) else {},
+            task_update=task_update,
             trace=result.get("tool_ledger") if isinstance(result.get("tool_ledger"), list) else (result.get("trace") or []),
             skills_loaded=result.get("skills_loaded") or [],
             user_message=self.message,
@@ -203,6 +223,7 @@ class AgentTurnExecution:
 
         drafts = list(result.get("drafts") or [])
         direct_drafts = list(result.get("direct_drafts") or [])
+        direct_draft_mutations = list(result.get("direct_draft_mutations") or [])
         intent_type = str(result.get("intent_type") or "chat")
         presentation = "action_cards" if (drafts or direct_drafts) else ("dashboard" if intent_type == "read_data" else "chat")
         visible_steps = [
@@ -245,6 +266,7 @@ class AgentTurnExecution:
             "decision_card": decision_card,
             "drafts": drafts,
             "direct_drafts": direct_drafts,
+            "direct_draft_mutations": direct_draft_mutations,
             "trace": result.get("trace", []),
             "steps": result.get("steps", 0),
             "stopped_reason": stopped_reason,
@@ -262,6 +284,15 @@ class AgentTurnExecution:
             "turn_id": self.turn_id,
             "runtime": "react",
         }
+
+
+def is_explicit_draft_confirmation(message: str) -> bool:
+    normalized = " ".join(str(message or "").strip().lower().split())
+    return (
+        DRAFT_CONFIRMATION_PHRASE in normalized
+        or "confirm create draft" in normalized
+        or "confirm draft creation" in normalized
+    )
 
 
 def public_memories(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -333,7 +364,9 @@ def tool_detail(item: dict[str, Any]) -> str:
 
 __all__ = [
     "AgentTurnExecution",
+    "DRAFT_CONFIRMATION_PHRASE",
     "TurnEventHandler",
+    "is_explicit_draft_confirmation",
     "public_account_context",
     "public_memories",
     "tool_detail",

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import time
-from threading import Lock
+from queue import Empty, Queue
+from threading import Lock, Thread
 from typing import Any, Callable
 from uuid import uuid4
 
@@ -12,8 +13,10 @@ from ..config import meta_draft_write_enabled
 from ..integrations.meta_ads import MetaAdsProvider
 from ..models import ExecutionLogRecord, OptimizationActionDraftRequest
 from ..services.account_gateway import RemoteMcpGateway
+from ..services.ga4_gateway import Ga4GatewayError
 from ..services.action_drafts import create_action_draft as create_optimization_action_draft
 from ..services.action_operations import action_operations_service
+from .ga4_tools import GA4_NAMESPACE, GA4_TOOL_NAMES, ga4_tool_definitions, is_ga4_tool
 
 
 LEGACY_WRITE_TOOL_NAMES = {
@@ -43,6 +46,7 @@ DIRECT_DRAFT_CREATE_TOOLS = {
     "ads_create_ad",
     "ads_create_creative",
 }
+DIRECT_DRAFT_MUTATION_TOOLS = {"ads_update_entity"}
 FORBIDDEN_PUBLISH_TOOLS = {"ads_activate_entity"}
 MEDIA_TOOL_NAMES = {"get_ad_image", "get_ad_video", "get_image_by_hash", "ads_get_ad_images", "ads_get_ad_videos", "ads_get_ad_preview_screenshot"}
 WRITE_TARGETS: dict[str, tuple[str, str]] = {
@@ -80,6 +84,7 @@ class MetaToolRegistry:
         preflight_runner: Callable[[str], Any] | None = None,
         result_cache: Any | None = None,
         direct_draft_logger: Callable[[dict[str, Any]], None] | None = None,
+        ga4_gateway: Any | None = None,
     ) -> None:
         self.provider = provider or MetaAdsProvider()
         self.remote = RemoteMcpGateway(access_token=self.provider.access_token_for_requests())
@@ -89,7 +94,11 @@ class MetaToolRegistry:
         self.tool_definitions = [dict(item) for item in tool_definitions if item.get("name")]
         if not self.tool_definitions:
             raise RuntimeError("No MCP tools are available.")
+        self.ga4_gateway = ga4_gateway
+        self.ga4_definitions = ga4_tool_definitions() if self.ga4_gateway is not None else []
         self.tools_by_name = {str(item["name"]): item for item in self.tool_definitions}
+        self.core_tools_by_name = {str(item["name"]): item for item in self.ga4_definitions}
+        self.tools_by_name.update(self.core_tools_by_name)
         self.draft_creator = draft_creator or create_optimization_action_draft
         self.action_creator = action_creator or (lambda draft: action_operations_service().create_from_optimization_draft(draft))
         self.preflight_runner = preflight_runner or (lambda action_id: action_operations_service().run_preflight(action_id))
@@ -100,6 +109,8 @@ class MetaToolRegistry:
         self.advertiser_job = "other"
         self.client_conversation_id = uuid4().hex[:20]
         self.deadline: float | None = None
+        self._mcp_call_state_lock = Lock()
+        self._mcp_call_stuck = False
 
     def set_context(self, account_id: str = "", request_text: str = "") -> None:
         self.selected_account_id = account_id.strip()
@@ -112,10 +123,48 @@ class MetaToolRegistry:
     def set_deadline(self, deadline: float | None) -> None:
         self.deadline = deadline
 
+    def core_tool_names(self) -> set[str]:
+        return set(self.core_tools_by_name)
+
+    def is_core_tool(self, name: str) -> bool:
+        return str(name or "") in self.core_tools_by_name
+
     def _remaining_timeout(self) -> float | None:
         if self.deadline is None:
             return None
         return max(0.1, self.deadline - time.monotonic())
+
+    def _call_mcp_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        with self._mcp_call_state_lock:
+            if self._mcp_call_stuck:
+                raise RuntimeError(
+                    "A previous MCP call exceeded its deadline; later MCP calls are skipped for this turn."
+                )
+        client_timeout = getattr(self.client, "timeout", None)
+        timeout = float(client_timeout or 45)
+        remaining = self._remaining_timeout()
+        if remaining is not None:
+            timeout = min(timeout, remaining)
+        timeout = max(0.1, timeout)
+        result_queue: Queue[tuple[str, Any]] = Queue(maxsize=1)
+
+        def worker() -> None:
+            try:
+                result_queue.put(("ok", self.client.call_tool(name, arguments)))
+            except BaseException as exc:
+                result_queue.put(("error", exc))
+
+        thread = Thread(target=worker, name=f"mcp-{name}", daemon=True)
+        thread.start()
+        try:
+            status, payload = result_queue.get(timeout=timeout)
+        except Empty as exc:
+            with self._mcp_call_state_lock:
+                self._mcp_call_stuck = True
+            raise TimeoutError(f"MCP tool {name} exceeded its {timeout:.1f}s deadline.") from exc
+        if status == "error":
+            raise payload
+        return payload
 
     def validate_arguments(self, name: str, args: dict[str, Any]) -> dict[str, Any] | None:
         if not isinstance(args, dict):
@@ -151,6 +200,8 @@ class MetaToolRegistry:
             description = str(tool.get("description") or "")
             if is_direct_draft_create_tool(name):
                 description = "Create a non-published Meta Draft object directly. Never activates or publishes. " + description
+            elif is_direct_draft_mutation_tool(name):
+                description = "Update or permanently delete an existing non-live Meta Draft only when draft_only=true. Never edits or activates a live object. " + description
             elif is_write_tool(name):
                 description = "Prepare a local approval draft. This tool never executes a Meta write. " + description
             if name in MEDIA_TOOL_NAMES:
@@ -164,13 +215,36 @@ class MetaToolRegistry:
                     "defer_loading": True,
                 }
             )
-        return [
+        ga4_namespace: list[dict[str, Any]] = []
+        for tool in self.ga4_definitions:
+            ga4_namespace.append(
+                {
+                    "type": "function",
+                    "name": str(tool["name"]),
+                    "description": str(tool.get("description") or "")[:4000],
+                    "parameters": _model_parameters(str(tool["name"]), tool.get("inputSchema") or {}),
+                    "defer_loading": True,
+                }
+            )
+        namespaces: list[dict[str, Any]] = [
             {
                 "type": "namespace",
                 "name": "meta_ads",
                 "description": "Meta Ads MCP tools. Use tool_search to load the tools relevant to the task.",
                 "tools": namespace_tools,
-            },
+            }
+        ]
+        if ga4_namespace:
+            namespaces.append(
+                {
+                    "type": "namespace",
+                    "name": GA4_NAMESPACE,
+                    "description": "Read-only GA4 measurement tools. Call them directly when website analytics evidence is relevant; no Skill load is required.",
+                    "tools": ga4_namespace,
+                }
+            )
+        return [
+            *namespaces,
             {"type": "tool_search"},
             _local_tool(
                 "ask_user",
@@ -182,7 +256,7 @@ class MetaToolRegistry:
 
     def portable_schemas(self, allowed_tools: set[str]) -> list[dict[str, Any]]:
         output: list[dict[str, Any]] = []
-        for name in sorted(allowed_tools):
+        for name in sorted(set(allowed_tools) | self.core_tool_names()):
             tool = self.tools_by_name.get(name)
             if not tool or is_ignored_tool(name) or is_forbidden_publish_tool(name):
                 continue
@@ -190,6 +264,8 @@ class MetaToolRegistry:
             description = str(tool.get("description") or "")
             if is_direct_draft_create_tool(name):
                 description = "Create a non-published Meta Draft object directly. Never activates or publishes. " + description
+            elif is_direct_draft_mutation_tool(name):
+                description = "Update or permanently delete an existing non-live Meta Draft only when draft_only=true. Never edits or activates a live object. " + description
             elif is_write_tool(name):
                 description = "Prepare a local approval draft. This tool never executes a Meta write. " + description
             if name in MEDIA_TOOL_NAMES:
@@ -216,8 +292,12 @@ class MetaToolRegistry:
         validation_error = self.validate_arguments(name, args)
         if validation_error:
             return validation_error
+        if is_ga4_tool(name):
+            return self._execute_ga4(name, args)
         if is_direct_draft_create_tool(name):
             return self.create_paused_draft(name, args)
+        if is_direct_draft_mutation_tool(name) and bool(args.get("draft_only")):
+            return self.mutate_draft(name, args)
         if is_write_tool(name):
             return self._create_write_draft(name, args)
         return self._execute_read(name, args)
@@ -260,12 +340,8 @@ class MetaToolRegistry:
         token = self.provider.access_token_for_requests()
         if token and getattr(self.client, "injects_access_token_argument", True):
             request_args["access_token"] = token
-        original_timeout = getattr(self.client, "timeout", None)
-        remaining_timeout = self._remaining_timeout()
-        if original_timeout is not None and remaining_timeout is not None:
-            self.client.timeout = max(1, min(float(original_timeout), remaining_timeout))
         try:
-            raw = self.client.call_tool(name, request_args)
+            raw = self._call_mcp_tool(name, request_args)
         except Exception as exc:
             payload = {
                 "tool": name,
@@ -275,9 +351,6 @@ class MetaToolRegistry:
             }
             self._record_direct_draft(name, args, payload)
             return payload
-        finally:
-            if original_timeout is not None:
-                self.client.timeout = original_timeout
         if isinstance(raw, dict):
             conversation_id = raw.get("client_conversation_id")
             if conversation_id:
@@ -313,6 +386,117 @@ class MetaToolRegistry:
         self._record_direct_draft(name, args, payload)
         return payload
 
+    def mutate_draft(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
+        if not is_direct_draft_mutation_tool(name):
+            return {"error": f"Tool is not an allowed direct Draft mutation: {name}"}
+        if not meta_draft_write_enabled():
+            return {"error": "Direct Meta Draft mutation is disabled. Set META_DRAFT_WRITE_ENABLED=true."}
+        if not self.client:
+            return {"error": "ADS_MCP_ENDPOINT_URL is not configured."}
+        validation_error = self.validate_arguments(name, args)
+        if validation_error:
+            return validation_error
+        if not bool(args.get("draft_only")):
+            return {"error": "Draft mutation requires draft_only=true."}
+        entity_id = str(args.get("entity_id") or "").strip()
+        entity_type = str(args.get("entity_type") or "").strip().lower()
+        if entity_type not in {"campaign", "ad_set", "ad", "adset"}:
+            return {"error": "entity_type must be campaign, ad_set, or ad."}
+        raw_fields = args.get("fields")
+        try:
+            fields = json.loads(raw_fields) if isinstance(raw_fields, str) else dict(raw_fields or {})
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return {"error": "fields must be a JSON object string."}
+        if not isinstance(fields, dict) or not fields:
+            return {"error": "fields must contain at least one update."}
+        status = str(fields.get("status") or "").strip().upper()
+        if status == "ACTIVE":
+            return {"error": "Draft mutation cannot activate or publish an entity."}
+        if status and status not in {"PAUSED", "ARCHIVED", "DELETED"}:
+            return {"error": "Draft status changes support PAUSED, ARCHIVED, or DELETED."}
+        operation = "deleted" if status == "DELETED" else "updated"
+        request_args = dict(args)
+        for key in ("access_token", "evidence", "recommendation", "risk_level", "current_state", "draft_only"):
+            request_args.pop(key, None)
+        schema = self.tools_by_name[name].get("inputSchema") or self.tools_by_name[name].get("input_schema") or {}
+        props = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
+        if "ad_account_id" in props and not str(request_args.get("ad_account_id") or "").strip() and self.selected_account_id:
+            request_args["ad_account_id"] = self.selected_account_id.removeprefix("act_")
+        if "client_conversation_id" in props:
+            request_args.setdefault("client_conversation_id", self.client_conversation_id)
+        if "advertiser_request" in props:
+            request_args.setdefault("advertiser_request", self.request_text or "Update a Meta Draft.")
+        if "advertiser_job" in props:
+            request_args.setdefault("advertiser_job", self.advertiser_job or "other")
+        token = self.provider.access_token_for_requests()
+        if token and getattr(self.client, "injects_access_token_argument", True):
+            request_args["access_token"] = token
+        try:
+            raw = self._call_mcp_tool(name, request_args)
+        except Exception as exc:
+            payload = {
+                "tool": name,
+                "entity_id": entity_id,
+                "draft_only": True,
+                "published": False,
+                "operation": operation,
+                "status": "FAILED",
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+            self._record_direct_mutation(name, args, payload)
+            return payload
+        if isinstance(raw, dict):
+            conversation_id = raw.get("client_conversation_id")
+            if conversation_id:
+                self.client_conversation_id = str(conversation_id)
+        normalized = _normalize_mcp_result(name, raw)
+        bounded = _bounded_result(name, normalized, MAX_GENERAL_RESULT_CHARS)
+        provider_error = _provider_result_error(normalized)
+        if provider_error:
+            payload = {
+                "tool": name,
+                "entity_id": entity_id,
+                "draft_only": True,
+                "published": False,
+                "operation": operation,
+                "status": "FAILED",
+                "error": provider_error,
+                "result": bounded.get("result"),
+                "truncated": bool(bounded.get("truncated")),
+            }
+            self._record_direct_mutation(name, args, payload)
+            return payload
+        payload = {
+            "tool": name,
+            "entity_id": entity_id,
+            "draft_only": True,
+            "published": False,
+            "operation": operation,
+            "status": "DELETED" if operation == "deleted" else "DRAFT",
+            "updated": operation != "deleted",
+            "deleted": operation == "deleted",
+            "result": bounded.get("result"),
+            "truncated": bool(bounded.get("truncated")),
+        }
+        self._record_direct_mutation(name, args, payload)
+        return payload
+
+    def _record_direct_mutation(self, name: str, args: dict[str, Any], payload: dict[str, Any]) -> None:
+        try:
+            self.direct_draft_logger(
+                {
+                    "account_id": str(args.get("ad_account_id") or self.selected_account_id or ""),
+                    "tool": name,
+                    "risk_level": str(args.get("risk_level") or ""),
+                    "created_entity_id": str(args.get("entity_id") or ""),
+                    "created": not bool(payload.get("error")),
+                    "operation": str(payload.get("operation") or "updated"),
+                    "error": str(payload.get("error") or ""),
+                }
+            )
+        except Exception:
+            return
+
     def _record_direct_draft(self, name: str, args: dict[str, Any], payload: dict[str, Any]) -> None:
         try:
             self.direct_draft_logger(
@@ -327,6 +511,36 @@ class MetaToolRegistry:
             )
         except Exception:
             return
+
+    def _execute_ga4(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
+        if self.ga4_gateway is None:
+            return {"tool": name, "error": "GA4 is not configured."}
+        args = dict(args)
+        force_refresh = bool(args.pop("force_refresh", False))
+        cache_args = dict(args)
+        if name != "ga4_list_properties" and "property_id" not in cache_args:
+            default_property_id = str(getattr(self.ga4_gateway, "default_property_id", "") or "")
+            if default_property_id:
+                cache_args["property_id"] = default_property_id
+        cached = None
+        if self.result_cache and not force_refresh:
+            cached = self.result_cache.get(name, cache_args, self.selected_account_id)
+        if cached and not cached.get("stale"):
+            return _cached_payload(cached)
+        try:
+            result = self.ga4_gateway.execute_tool(name, args, timeout_seconds=self._remaining_timeout())
+        except Ga4GatewayError as exc:
+            if cached:
+                return _cached_payload(cached, error=f"{exc.code}: {exc}")
+            return {"tool": name, "error": str(exc), "error_code": exc.code}
+        except Exception as exc:
+            if cached:
+                return _cached_payload(cached, error=f"{type(exc).__name__}: {exc}")
+            return {"tool": name, "error": f"{type(exc).__name__}: {exc}"}
+        bounded = _bounded_result(name, result, MAX_GENERAL_RESULT_CHARS)
+        if self.result_cache:
+            self.result_cache.put(name, cache_args, bounded, self.selected_account_id)
+        return bounded
 
     def _execute_read(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
         if not self.client:
@@ -355,19 +569,12 @@ class MetaToolRegistry:
         token = self.provider.access_token_for_requests()
         if token and getattr(self.client, "injects_access_token_argument", True):
             args["access_token"] = token
-        original_timeout = getattr(self.client, "timeout", None)
-        remaining_timeout = self._remaining_timeout()
-        if original_timeout is not None and remaining_timeout is not None:
-            self.client.timeout = max(1, min(float(original_timeout), remaining_timeout))
         try:
-            result = self.client.call_tool(name, args)
+            result = self._call_mcp_tool(name, args)
         except Exception as exc:
             if cached:
                 return _cached_payload(cached, error=f"{type(exc).__name__}: {exc}")
             return {"error": f"{type(exc).__name__}: {exc}"}
-        finally:
-            if original_timeout is not None:
-                self.client.timeout = original_timeout
         if isinstance(result, dict):
             conversation_id = result.get("client_conversation_id")
             if conversation_id:
@@ -525,6 +732,11 @@ def _model_parameters(name: str, schema: dict[str, Any]) -> dict[str, Any]:
         properties["recommendation"] = {"type": "string", "description": "Proposed change and expected rationale."}
         properties["risk_level"] = {"type": "string", "enum": ["low", "medium", "high"], "default": "medium"}
         properties["current_state"] = {"type": "object", "description": "Current entity state from a successful read, including budget/status and relevant evidence context."}
+        if is_direct_draft_mutation_tool(name):
+            properties["draft_only"] = {
+                "type": "boolean",
+                "description": "Set true only to edit or delete an existing non-live Meta Draft backed by a fresh object_state=draft read. Omit for a local optimization draft.",
+            }
         for item in ("evidence", "recommendation", "risk_level", "current_state"):
             if item not in required:
                 required.append(item)
@@ -540,6 +752,8 @@ def is_ignored_tool(name: str) -> bool:
 
 
 def is_read_tool(name: str) -> bool:
+    if is_ga4_tool(name):
+        return True
     if name in OFFICIAL_READ_EXACT:
         return True
     if name.startswith("ads_"):
@@ -549,6 +763,10 @@ def is_read_tool(name: str) -> bool:
 
 def is_direct_draft_create_tool(name: str) -> bool:
     return name in DIRECT_DRAFT_CREATE_TOOLS
+
+
+def is_direct_draft_mutation_tool(name: str) -> bool:
+    return name in DIRECT_DRAFT_MUTATION_TOOLS
 
 
 def is_forbidden_publish_tool(name: str) -> bool:
@@ -579,6 +797,16 @@ def _provider_result_error(value: Any) -> str:
         errors = value.get("errors")
         if isinstance(errors, list) and errors:
             return json.dumps(errors, ensure_ascii=False)[:1000]
+        active_errors = value.get("active_errors")
+        if isinstance(active_errors, str):
+            try:
+                active_errors = json.loads(active_errors)
+            except json.JSONDecodeError:
+                pass
+        if isinstance(active_errors, list) and active_errors:
+            return json.dumps(active_errors, ensure_ascii=False)[:1000]
+        if isinstance(active_errors, dict) and active_errors:
+            return json.dumps(active_errors, ensure_ascii=False)[:1000]
         for nested in value.values():
             found = _provider_result_error(nested)
             if found:
@@ -635,18 +863,21 @@ def _log_direct_draft_execution(event: dict[str, Any]) -> None:
 
     created = bool(event.get("created"))
     entity_id = str(event.get("created_entity_id") or "")
+    operation = str(event.get("operation") or "created")
+    source_prefix = "direct_draft_mutation" if operation in {"updated", "deleted"} else "direct_draft"
     PersistentStore().save_execution_log(
         ExecutionLogRecord(
             account_id=str(event.get("account_id") or ""),
             source_type="action_draft",
-            source_id=f"direct_draft:{entity_id or event.get('tool')}",
+            source_id=f"{source_prefix}:{entity_id or event.get('tool')}",
             status="succeeded" if created else "failed",
             request_summary={
                 "tool": event.get("tool"),
                 "mode": "meta_draft_mode",
+                "operation": operation,
                 "risk_level": event.get("risk_level"),
             },
-            result={"created_entities": [{"id": entity_id, "entity_type": "draft", "status": "draft"}]} if created else {},
+            result={"draft_operation": operation, "entity_id": entity_id} if created else {},
             error=str(event.get("error") or ""),
         )
     )

@@ -3,7 +3,7 @@
     "snapshot_date": "2026-10-18",
     "source": "https://mcp.facebook.com/ads tools/list",
     "tool_count": 98,
-    "max_loaded_skills": 4,
+    "max_loaded_skills": 8,
     "read_groups": {
         "R-ACCOUNT": [
             "ads_get_ad_accounts",
@@ -97,6 +97,7 @@
             "ads_create_ad_set",
             "ads_create_creative",
             "ads_create_ad",
+            "ads_update_entity",
             "ads_create_custom_audience",
             "ads_creative_upload_media",
             "ads_creative_upload_local_image",

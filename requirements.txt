@@ -8,3 +8,5 @@ alembic>=1.17.2,<1.18
 psycopg[binary]>=3.3.2,<3.4
 redis>=5.3.1,<6
 jsonschema>=4.26.0,<5
+google-auth>=2.40,<3
+requests>=2.32,<3

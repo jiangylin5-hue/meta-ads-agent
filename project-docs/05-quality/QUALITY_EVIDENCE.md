@@ -8,7 +8,7 @@
 
 ## Stage 07 Gate (historical baseline)
 
-Date: public snapshot
+Date: 2026-10-18
 
 Scope:
 
@@ -46,7 +46,7 @@ Not proven:
 
 ## Stage 08 MCP-native Gate
 
-Date: public snapshot
+Date: 2026-10-18
 
 Scope:
 
@@ -77,12 +77,12 @@ Safety evidence:
 
 ## Stage 08 Skill Runtime Gate
 
-Date: public snapshot
+Date: 2026-10-18
 
 Scope:
 
 - 12 project Skill folders in `backend/skills/` with `SKILL.md`, `contract.json`, and on-demand references
-- model-selected `load_skill` with batch loading up to four Skills and `read_skill_reference` for on-demand details
+- model-selected `load_skill` with batch loading up to eight Skills and `read_skill_reference` for on-demand details
 - code-enforced tool-group scope before MCP execution
 - `skills_loaded` and Skill trace summaries
 - Draft-only behavior for write-like tools
@@ -114,10 +114,9 @@ Not proven:
 
 The fixed chat pipeline, prompt registry, intent router, memory compiler, query rewrite, multi-role runtime, old verification scripts, and their tests were removed after dependency checks. A static boundary test prevents the deleted route and core files from returning.
 
-
 ## Stage 09 Context And Agent Memory Gate
 
-Date: public snapshot
+Date: 2026-10-18
 
 Scope:
 
@@ -143,10 +142,9 @@ Not proven:
 - live MCP cache hit rates under real network conditions
 - live Meta writes
 
-
 ## Stage 09 Backend Hardening Gate
 
-Date: public snapshot
+Date: 2026-10-18
 
 Scope:
 
@@ -170,10 +168,9 @@ Not proven:
 - crash recovery under database failover
 - model or live provider evaluation
 
-
 ## Stage 09 SSE Streaming Gate
 
-Date: public snapshot
+Date: 2026-10-18
 
 Scope:
 
@@ -199,7 +196,7 @@ Not proven:
 
 ## Stage 09 Targeted Hardening Gate
 
-Date: public snapshot
+Date: 2026-10-18
 
 Scope:
 
@@ -226,10 +223,9 @@ Not proven:
 - real provider behavior for every write-tool schema variant
 - a real OpenAI or live Meta call in this hardening pass
 
-
 ## Stage 09 Meta Credential Gate
 
-Date: public snapshot
+Date: 2026-10-18
 
 Scope:
 
@@ -249,10 +245,9 @@ Not proven:
 - live Meta writes
 - E2E model behavior on inactive accounts
 
-
 ## Stage 09 Real Small-Batch E2E
 
-Date: public snapshot
+Date: 2026-10-18
 
 Scope:
 
@@ -286,7 +281,7 @@ Not proven:
 
 ## Stage 09 Direct Draft Mode Gate
 
-Date: public snapshot
+Date: 2026-10-18
 
 Scope:
 
@@ -299,7 +294,7 @@ Recorded results:
 - `ads_create_campaign` created Draft object `<campaign_draft_id>`.
 - Draft readback returned `ad_object_type=campaign`, action `add`, draft status `EDITING`, validation status `VALIDATED`, source `mcp_campaign_creation`.
 - The live campaign list did not include the Draft object.
-- Execution log `<execution_log_id>` recorded source `direct_draft:<campaign_draft_id>` with status `succeeded`.
+- Execution log `exec_99fe0e6836f2` recorded source `direct_draft:<campaign_draft_id>` with status `succeeded`.
 - Group hierarchy Draft creation succeeded: Campaign `<campaign_draft_id>` -> Ad Set `<ad_set_draft_id>` -> Ad `<ad_draft_id>`.
 - Ad Set readback: `ad_object_type=adset`, parent Campaign ID matches, status `EDITING`, validation `VALIDATED`.
 - Ad readback: `ad_object_type=ad`, parent Ad Set ID matches, status `EDITING`, validation `VALIDATED`.
@@ -316,7 +311,7 @@ Not proven:
 
 ## Stage 09 DeepSeek Provider Gate
 
-Date: public snapshot
+Date: 2026-10-18
 
 Scope:
 
@@ -349,13 +344,39 @@ Not proven:
 
 ## Stage 09 Network Reachability Check
 
-Date: public snapshot
+Date: 2026-10-18
 
 - VPN disabled on the test host.
 - `scripts/doctor.py`: official Meta Ads MCP unreachable, `WinError 10060` connection timeout, 0 tools.
 - `scripts/verify_meta_access_token.py --account-limit 3`: Meta Graph API unreachable, `WinError 10060`.
 - DeepSeek provider remains independently reachable.
 - Current conclusion: real Meta Skill evaluation requires the VPN/proxy path or a deployment network with outbound HTTPS access to `mcp.facebook.com` and `graph.facebook.com`.
+
+
+## Stage 09 MCP Deadline And Draft Hierarchy
+
+Date: 2026-10-18
+
+- Scope: hard MCP call deadlines, fail-fast after a stuck call, and Draft readback evidence for Campaign -> Ad Set -> Ad creation.
+- Local evidence: backend suite `197 passed, 1 skipped`; focused Draft readback evidence test passed; frontend lint/build passed; Playwright `18 passed`.
+- MCP recovered with 98 tools. The first new-ad attempt created a Campaign Draft but blocked Ad Set creation because `ad_object_id` was not recognized as target evidence.
+- Retest: `campaign_plan`, 15 steps, 150.9 seconds, three Draft objects in `EDITING/VALIDATED`, zero live Campaigns added, three execution logs, no activation or publication.
+- Draft ids: Campaign `120250344539450328`, Ad Set `120250344540250328`, Ad `120250344540950328`.
+- Remaining gap: reused lead-form creative is paired with `WEBSITE/LINK_CLICKS`, the account has no Dataset, and account timezone/policy preflight remain unverified.
+
+
+## Stage 09 Draft Mutation/Confirmation Gate
+
+- Draft-only budget update verified 2000→2500 minor units; provider rejected DELETED for a never-published Campaign Draft with error 1487564.
+- Two-turn creation gate passed: zero Drafts before explicit `确认创建草稿`, one Campaign Draft after confirmation.
+- Backend `194 passed, 1 skipped`; docs `10 passed`; no live object was activated or published.
+
+
+## Stage 09 Eight-Skill Context Gate
+
+- Per-turn and carried active Skill limit increased from 4 to 8.
+- Skill instruction budget increased to 10,000 tokens; the worst-case eight-Skill instruction set is about 6,433 tokens.
+- Backend `197 passed, 1 skipped`; docs and boundary checks passed.
 
 ## Stage 09 Real-Data Audit And Diagnosis Follow-up
 
@@ -368,3 +389,12 @@ Date: 2026-10-19
 - Key metrics and conclusions were rechecked against cached raw MCP results. Both runs were read-only and used no OpenAI request.
 - Remaining gap: both new accounts were disabled, so live delivery optimization and post-recovery performance remain unverified.
 - Full record: [REAL_DATA_E2E_2026-10-19_CN.md](REAL_DATA_E2E_2026-10-19_CN.md).
+
+## Stage 10 GA4 Measurement Tools
+
+Date: 2026-10-19
+
+- Global read-only GA4 Admin/Data API tools are available without a Skill; focused tests and the full backend suite passed.
+- Real DeepSeek E2E: 4 steps, 25.6 seconds, 7,039 input / 616 output tokens, five GA4 calls, zero Skills, zero Drafts.
+- Property `<ga4_property_id>` is readable and reports standard GA4, `Asia/Shanghai`, and `CNY`, with zero data streams, key events, and report rows.
+- Full record: [GA4_TOOL_E2E_2026-10-19_CN.md](GA4_TOOL_E2E_2026-10-19_CN.md).

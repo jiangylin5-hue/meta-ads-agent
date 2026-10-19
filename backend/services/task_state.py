@@ -97,7 +97,7 @@ class TaskStateService:
                     "result": item.get("result") if isinstance(item.get("result"), dict) else {},
                 }
             )
-        active_skill_ids = list(dict.fromkeys([*(task.get("active_skill_ids") or []), *skills_loaded]))[:4]
+        active_skill_ids = list(dict.fromkeys([*(task.get("active_skill_ids") or []), *skills_loaded]))[:8]
         status = str(update.get("status") or task.get("status") or "active")
         if status not in TASK_STATUSES:
             status = "active"

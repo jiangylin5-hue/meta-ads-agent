@@ -110,6 +110,8 @@ export type ChatResponse = {
   decision_card?: ApiRecord;
   trace?: ApiRecord[];
   drafts?: AgentDraft[];
+  direct_drafts?: ApiRecord[];
+  direct_draft_mutations?: ApiRecord[];
   steps?: number;
   stopped_reason?: string;
   skills_loaded?: string[];

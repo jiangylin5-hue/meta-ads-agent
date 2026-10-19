@@ -4,9 +4,9 @@
 
 - Document status: public portfolio README
 - Project documentation: [project-docs/README.md](project-docs/README.md)
-- Active implementation stage: [STAGE_09_CONTEXT_AND_AGENT_MEMORY.md](project-docs/03-stages/STAGE_09_CONTEXT_AND_AGENT_MEMORY.md)
+- Active implementation stage: [STAGE_10_GA4_MEASUREMENT_TOOLS.md](project-docs/03-stages/STAGE_10_GA4_MEASUREMENT_TOOLS.md)
 
-A portfolio snapshot of a bounded Meta Ads copilot built around the official Meta Ads MCP, project-level Skills, DeepSeek/OpenAI-compatible model providers, durable context, and approval-aware Draft workflows.
+A portfolio snapshot of a bounded Meta Ads copilot built around the official Meta Ads MCP, global read-only GA4 measurement tools, project-level Skills, DeepSeek/OpenAI-compatible model providers, durable context, and approval-aware Draft workflows.
 
 > This is a curated public release snapshot. Internal development history, operational logs, credentials, and customer account identifiers are intentionally excluded. It represents the final engineered state rather than the private iteration log.
 
@@ -16,6 +16,7 @@ A portfolio snapshot of a bounded Meta Ads copilot built around the official Met
 - Progressive disclosure: a short Skill catalog is visible first; only active Skill tools are exposed.
 - 12 project Skills covering account briefs, diagnosis, audits, creative, optimization, planning, tracking, audience, catalog, competitive research, experiments, and policy review.
 - Official Meta Ads MCP discovery with provider-neutral tool execution.
+- Global read-only GA4 Admin/Data API tools for properties, key events, landing pages, reports, funnels, and tracking readiness; GA4 requires no Skill.
 - DeepSeek `deepseek-flash` with high reasoning as the default provider; OpenAI Responses remains optional.
 - Five recent conversation rounds plus structured summary compaction.
 - Long-term user/account Memory and resumable task state.
@@ -41,6 +42,7 @@ Next.js workbench
   -> bounded ReAct loop
        - DeepSeek Chat Completions or OpenAI Responses
        - Skill-scoped Meta MCP tools
+       - global read-only GA4 tools
        - structured observations
   -> final answer / local action record / non-live Meta Draft
 ```
@@ -49,7 +51,9 @@ Core implementation:
 
 - `backend/agent/runtime.py`: ReAct loop and provider-neutral tool handling
 - `backend/agent/deepseek.py`: DeepSeek Chat Completions adapter
-- `backend/agent/tools.py`: MCP discovery, budgets, Draft routing, activation blocking
+- `backend/agent/tools.py`: Meta MCP and global GA4 tool routing
+- `backend/agent/ga4_tools.py`: global read-only GA4 tool schemas
+- `backend/services/ga4_gateway.py`: GA4 Admin/Data API gateway
 - `backend/agent/context.py`: five-round window, summary contract, token estimates
 - `backend/services/turn_control.py`: turn leases, idempotency, replay
 - `backend/services/long_term_memory.py`: typed Memory
@@ -60,7 +64,8 @@ Core implementation:
 
 ## Safety Boundary
 
-- All Meta credentials stay in environment variables and never enter prompts, Memory, caches, traces, or source.
+- All Meta and GA4 credentials stay in environment variables or a local credential file and never enter prompts, Memory, caches, traces, or source.
+- GA4 tools are read-only. No property, data-stream, key-event, or Measurement Protocol write is exposed to the model.
 - Only four create tools may reach MCP: `ads_create_campaign`, `ads_create_ad_set`, `ads_create_ad`, `ads_create_creative`.
 - Official Draft Mode returns non-live Draft objects.
 - `ads_activate_entity`, update, delete, and publish paths are unavailable to the model.
@@ -81,7 +86,7 @@ npm.cmd run dev --prefix frontend
 
 Open `http://127.0.0.1:3000/app`.
 
-Copy `.env.example` to `.env` and provide your own credentials. Never commit `.env`.
+Copy `.env.example` to `.env` and provide your own credentials. Never commit `.env`. GA4 requires a service-account JSON with Viewer access to the numeric Property ID.
 
 ## Verification
 
@@ -110,5 +115,5 @@ See [DEVELOPMENT_JOURNEY.md](DEVELOPMENT_JOURNEY.md) for the five-stage engineer
 
 - `project-docs/01-product/`: product scope and functional behavior
 - `project-docs/02-architecture/`: runtime, MCP, data, and workflow design
-- `project-docs/03-stages/STAGE_09_CONTEXT_AND_AGENT_MEMORY.md`: active implementation contract
-- `project-docs/05-quality/`: verification and quality evidence
+- `project-docs/03-stages/STAGE_10_GA4_MEASUREMENT_TOOLS.md`: active implementation contract
+- `project-docs/05-quality/`: verification and quality evidence, including [GA4 tool-calling E2E](project-docs/05-quality/GA4_TOOL_E2E_2026-10-19_CN.md)
