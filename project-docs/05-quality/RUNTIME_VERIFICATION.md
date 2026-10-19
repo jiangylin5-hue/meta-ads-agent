@@ -4,7 +4,7 @@
 
 - Document status: active verification guide
 - Source of truth: [IMPLEMENTATION_SOURCE_OF_TRUTH.md](../00-governance/IMPLEMENTATION_SOURCE_OF_TRUTH.md)
-- Active stage: [STAGE_10_GA4_MEASUREMENT_TOOLS.md](../03-stages/STAGE_10_GA4_MEASUREMENT_TOOLS.md)
+- Active stage: [STAGE_09_CONTEXT_AND_AGENT_MEMORY.md](../03-stages/STAGE_09_CONTEXT_AND_AGENT_MEMORY.md)
 
 ## 1. Local Regression
 
@@ -18,7 +18,7 @@ npm.cmd run test:smoke --prefix frontend
 
 This proves:
 
-- the agent loop handles the Skill catalog, `load_skill`, batched multi-Skill loading up to eight Skills, tool search, tool calls, final answers, ask-user, max steps, and forbidden tools
+- the agent loop handles the Skill catalog, `load_skill`, batched multi-Skill loading up to four Skills, tool search, tool calls, final answers, ask-user, max steps, and forbidden tools
 - five recent conversation rounds are retained and older dialogue is summarized with source message ids
 - Memory and task-progress local tools emit persistable structured updates
 - fresh MCP result cache hits avoid a second provider call
@@ -49,7 +49,7 @@ This proves:
 - POST SSE parsing handles split UTF-8 data, CRLF, multi-line data, heartbeats, unknown events, abort signals, and sequence checks
 - tool start/finish pairs, Draft staging, validation, timeout, retryability, replay, and disconnect continuation are covered
 
-It does not prove a live Meta read, a real OpenAI call, or live GA4 account data beyond the configured Property test.
+It does not prove a live Meta read or a real OpenAI call.
 
 ## 2. Real MCP Tool-Search Smoke
 
@@ -94,27 +94,6 @@ The project uses a Meta System User token with `expires_at=never` (non-expiring;
 ```
 
 `doctor.py` must report the official MCP as reachable and ready. The token verifier must report the readable account count. Token Debugger must report the correct App ID and `expires_at=never`.
-
-
-## 5. Real GA4 Measurement Check
-
-The GA4 gateway uses a service-account JSON outside the repository and the `analytics.readonly` scope. It validates the numeric Property ID and never accepts a `G-` measurement ID as a reporting property.
-
-Focused verification:
-
-```powershell
-.venv\Scripts\python.exe -m pytest tests\test_ga4_tools.py -q
-```
-
-Real Agent result:
-
-- Property `<ga4_property_id>` is readable.
-- Property timezone is `Asia/Shanghai`; currency is `CNY`; service level is standard.
-- Data streams, key events, Google Ads links, and report rows are empty because tracking has not been configured.
-- DeepSeek completed in 4 steps and 25.6 seconds.
-- `skills_loaded=[]`; the model called GA4 tools directly without `load_skill`.
-- Calls: property details, data streams, key events, 365-day report, and realtime report.
-- Draft count: zero. No GA4 write method exists in the tool surface.
 
 ## Evidence Rules
 

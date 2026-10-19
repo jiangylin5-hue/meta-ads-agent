@@ -3,8 +3,8 @@
 ## Status
 
 - Document status: active handover reference
-- Updated: 2026-10-18
-- Active stage: [STAGE_08_MCP_NATIVE_TOOLS_AND_SKILLS.md](../03-stages/STAGE_08_MCP_NATIVE_TOOLS_AND_SKILLS.md)
+- Updated: public-snapshot
+- Active stage: [STAGE_09_CONTEXT_AND_AGENT_MEMORY.md](../03-stages/STAGE_09_CONTEXT_AND_AGENT_MEMORY.md)
 - Source of truth: [IMPLEMENTATION_SOURCE_OF_TRUTH.md](IMPLEMENTATION_SOURCE_OF_TRUTH.md)
 
 ## Thirty Second Summary
@@ -54,4 +54,4 @@ frontend workbench
 1. [AGENT_WORKFLOW.md](../02-architecture/AGENT_WORKFLOW.md)
 2. [CODE_BOUNDARIES.md](CODE_BOUNDARIES.md)
 3. [RUNTIME_VERIFICATION.md](../05-quality/RUNTIME_VERIFICATION.md)
-4. [STAGE_08_MCP_NATIVE_TOOLS_AND_SKILLS.md](../03-stages/STAGE_08_MCP_NATIVE_TOOLS_AND_SKILLS.md)
+4. [STAGE_09_CONTEXT_AND_AGENT_MEMORY.md](../03-stages/STAGE_09_CONTEXT_AND_AGENT_MEMORY.md)

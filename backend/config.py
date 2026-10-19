@@ -142,7 +142,7 @@ def llm_max_retries() -> int:
 
 def llm_max_output_tokens() -> int:
     load_dotenv()
-    raw_value = os.getenv("LLM_MAX_OUTPUT_TOKENS", "16384")
+    raw_value = os.getenv("LLM_MAX_OUTPUT_TOKENS", "4096")
     try:
         return max(256, int(raw_value))
     except ValueError:
@@ -234,36 +234,6 @@ def meta_live_write_enabled() -> bool:
 def meta_draft_write_enabled() -> bool:
     load_dotenv()
     return os.getenv("META_DRAFT_WRITE_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
-
-
-def ga4_credentials_path() -> str:
-    load_dotenv()
-    return os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
-
-
-def ga4_project_id() -> str:
-    load_dotenv()
-    return os.getenv("GOOGLE_PROJECT_ID", "").strip()
-
-
-def ga4_default_property_id() -> str:
-    load_dotenv()
-    return os.getenv("GA4_PROPERTY_ID", "").strip()
-
-
-def ga4_request_timeout_seconds() -> int:
-    load_dotenv()
-    raw_value = os.getenv("GA4_TIMEOUT_SECONDS", "30")
-    try:
-        return max(5, min(int(raw_value), 60))
-    except ValueError:
-        return 30
-
-
-def ga4_enabled() -> bool:
-    load_dotenv()
-    credentials = ga4_credentials_path()
-    return bool(credentials and Path(credentials).expanduser().is_file())
 
 
 def app_allowed_origins() -> list[str]:

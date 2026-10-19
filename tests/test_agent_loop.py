@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-import json
-import time
-from threading import Event
 from types import SimpleNamespace
 from typing import Any
 
 from fastapi.testclient import TestClient
 
-from backend.agent.runtime import AgentRuntime, _build_live_read_evidence, _draft_evidence_errors, _draft_mutation_evidence_errors
-from backend.agent.state import AgentState
+from backend.agent.runtime import AgentRuntime
 from backend.agent.tools import MAX_GENERAL_RESULT_CHARS, MetaToolRegistry, is_forbidden_publish_tool
 from backend.main import app
 
@@ -313,41 +309,60 @@ def test_meta_tool_requires_a_loaded_skill() -> None:
     assert result["trace"][1]["result"]["error"].startswith("Tool is outside the loaded skill scope")
 
 
-def test_more_than_eight_skills_are_rejected() -> None:
-    skill_ids = [
-        "account_brief",
-        "performance_diagnosis",
-        "creative_diagnosis",
-        "campaign_plan",
-        "policy_preflight",
-        "tracking_troubleshooting",
-        "audience_audit",
-        "catalog_health",
-        "competitive_research",
-    ]
-    llm = FakeLLM([_skill_response(skill_id) for skill_id in skill_ids])
-    result = AgentRuntime(llm=llm, tools=_registry(FakeMCP()), max_steps=9).run_turn("Check everything.")
+def test_more_than_four_skills_are_rejected() -> None:
+    llm = FakeLLM(
+        [
+            _skill_response("account_brief"),
+            _skill_response("performance_diagnosis"),
+            _skill_response("creative_diagnosis"),
+            _skill_response("campaign_plan"),
+            _skill_response("policy_preflight"),
+            _function_response(
+                "ads_get_ad_entities",
+                {"ad_account_id": "act_1", "date_preset": "last_7d", "level": "campaign", "force_refresh": True},
+            ),
+            _multi_submit_response(
+                {
+                    "account_brief": {
+                        "facts": ["Read the account."],
+                        "missing_data": [],
+                        "source_tools": ["ads_get_ad_entities"],
+                    },
+                    "performance_diagnosis": {
+                        "facts": ["Read the account."],
+                        "hypotheses": [],
+                        "missing_data": [],
+                        "decision": "HOLD",
+                        "comparison_window": "previous_7d",
+                        "sample_size": {"impressions": 12000},
+                        "learning_state": "ACTIVE",
+                        "source_tools": ["ads_get_ad_entities"],
+                    },
+                    "creative_diagnosis": {
+                        "facts": ["Read the account."],
+                        "hypotheses": [],
+                        "missing_data": [],
+                        "decision": "HOLD",
+                        "source_tools": ["ads_get_ad_entities"],
+                    },
+                    "campaign_plan": {
+                        "plan": {"summary": "Use the current structure."},
+                        "assumptions": [],
+                        "missing_data": [],
+                        "draft_request": {},
+                        "source_tools": ["ads_get_ad_entities"],
+                    },
+                },
+                "HOLD",
+                reply="Four skills loaded.",
+            ),
+        ]
+    )
+    result = AgentRuntime(llm=llm, tools=_registry(FakeMCP()), max_steps=7).run_turn("Check everything.")
 
-    assert result["skills_loaded"] == skill_ids[:8]
-    assert result["trace"][8]["result"]["error"].startswith("At most 8 skills")
+    assert result["skills_loaded"] == ["account_brief", "performance_diagnosis", "creative_diagnosis", "campaign_plan"]
+    assert result["trace"][4]["result"]["error"].startswith("At most 4 skills")
 
-
-def test_batch_load_accepts_eight_skills() -> None:
-    skill_ids = [
-        "account_brief",
-        "performance_diagnosis",
-        "creative_diagnosis",
-        "campaign_plan",
-        "policy_preflight",
-        "tracking_troubleshooting",
-        "audience_audit",
-        "catalog_health",
-    ]
-    llm = FakeLLM([_function_response("load_skill", {"skill_ids": skill_ids})])
-    result = AgentRuntime(llm=llm, tools=_registry(FakeMCP()), max_steps=1).run_turn("Load the full launch skill set.")
-
-    assert len(result["skills_loaded"]) == 8
-    assert "error" not in result["trace"][0]["result"]
 
 def test_load_skill_accepts_multiple_ids_for_multi_intent_requests() -> None:
     llm = FakeLLM(
@@ -396,7 +411,7 @@ def test_load_skill_accepts_multiple_ids_for_multi_intent_requests() -> None:
     assert result["skills_loaded"] == ["account_brief", "performance_diagnosis", "creative_diagnosis"]
     assert result["trace"][0]["result"]["skill"] == "account_brief + performance_diagnosis + creative_diagnosis"
     load_tool = next(tool for tool in llm.calls[0][2] if tool.get("name") == "load_skill")
-    assert load_tool["parameters"]["properties"]["skill_ids"]["maxItems"] == 8
+    assert load_tool["parameters"]["properties"]["skill_ids"]["maxItems"] == 4
 
 
 def test_multi_skill_decision_conflict_requires_model_resolution() -> None:
@@ -1173,68 +1188,6 @@ def test_official_read_injects_metadata_and_official_write_stays_local() -> None
     assert captured["request"].action["action_type"] == "ads_update_entity"
     assert captured["request"].action["target_id"] == "cmp_1"
 
-def test_read_tool_call_hard_timeout_is_bounded_and_later_calls_fail_fast() -> None:
-    release = Event()
-
-    class SlowMCP(FakeMCP):
-        def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
-            self.calls.append((name, dict(arguments or {})))
-            release.wait(1.5)
-            return {"data": []}
-
-    mcp = SlowMCP()
-    registry = _registry(mcp)
-    registry.set_deadline(time.monotonic() + 0.15)
-    started = time.monotonic()
-    result = registry.execute("ads_get_ad_accounts", {})
-    elapsed = time.monotonic() - started
-
-    assert elapsed < 1.0
-    assert "deadline" in result["error"]
-    second = registry.execute("ads_get_ad_accounts", {})
-    assert "later MCP calls are skipped" in second["error"]
-    assert len(mcp.calls) == 1
-    release.set()
-
-
-def test_direct_draft_hard_timeout_is_logged_as_failure(monkeypatch) -> None:
-    monkeypatch.setenv("META_DRAFT_WRITE_ENABLED", "true")
-    release = Event()
-
-    class SlowMCP(FakeMCP):
-        def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
-            self.calls.append((name, dict(arguments or {})))
-            release.wait(1.5)
-            return {"data": []}
-
-    logged: list[dict[str, Any]] = []
-    registry = MetaToolRegistry(
-        mcp_client=SlowMCP(),
-        tool_definitions=_official_tool_definitions(),
-        direct_draft_logger=logged.append,
-    )
-    registry.set_context("act_123", "Create a paused campaign draft")
-    registry.set_deadline(time.monotonic() + 0.15)
-    result = registry.create_paused_draft(
-        "ads_create_campaign",
-        {
-            "ad_account_id": "act_123",
-            "campaign_name": "Paused E2E Draft",
-            "objective": "OUTCOME_TRAFFIC",
-            "buying_type": "AUCTION",
-            "evidence": "User requested a new traffic campaign draft.",
-            "recommendation": "Create the campaign in PAUSED state only.",
-            "risk_level": "low",
-            "current_state": {"account_status": "ACTIVE"},
-        },
-    )
-
-    assert result["created"] is False
-    assert "deadline" in result["error"]
-    assert logged[0]["created"] is False
-    release.set()
-
-
 def test_agent_turn_route_replays_completed_idempotent_turn(monkeypatch) -> None:
     import backend.routes.agent_routes as agent_handler
 
@@ -1366,7 +1319,6 @@ def test_runtime_records_direct_meta_draft_without_local_staging(monkeypatch) ->
     result = AgentRuntime(llm=llm, tools=registry, max_steps=5).run_turn(
         "Create a paused traffic campaign draft.",
         account_id="act_1",
-        draft_creation_authorized=True,
     )
 
     assert len(result["direct_drafts"]) == 1
@@ -1405,227 +1357,4 @@ def test_direct_draft_provider_error_is_not_reported_as_created(monkeypatch) -> 
     assert result["created"] is False
     assert result["status"] == "FAILED"
     assert "creative is required" in result["error"]
-    assert logged[0]["created"] is False
-
-
-def test_draft_readback_ids_unlock_child_draft_creation() -> None:
-    state = AgentState(message="create draft hierarchy", account_id="act_1")
-    campaign_evidence = _build_live_read_evidence(
-        "ads_get_ad_entities",
-        {"ad_account_id": "act_1", "level": "campaign", "object_state": "draft", "force_refresh": True},
-        {
-            "tool": "ads_get_ad_entities",
-            "result": {
-                "ad_drafts": [
-                    {
-                        "ad_object_id": "campaign_draft_1",
-                        "ad_object_type": "campaign",
-                        "status": "EDITING",
-                        "validation_status": "VALIDATED",
-                        "action": "add",
-                    }
-                ]
-            },
-        },
-        "act_1",
-    )
-    state.live_read_evidence.append(campaign_evidence)
-
-    assert "campaign_draft_1" in campaign_evidence["target_ids"]
-    assert _draft_evidence_errors(
-        "ads_create_ad_set",
-        {
-            "ad_account_id": "act_1",
-            "campaign_id": "campaign_draft_1",
-            "current_state": {"campaign_draft_status": "EDITING"},
-        },
-        state,
-    ) == []
-
-    adset_evidence = _build_live_read_evidence(
-        "ads_get_ad_entities",
-        {"ad_account_id": "act_1", "level": "adset", "object_state": "draft", "force_refresh": True},
-        {
-            "tool": "ads_get_ad_entities",
-            "result": {
-                "ad_drafts": [
-                    {
-                        "ad_object_id": "adset_draft_1",
-                        "parent_ad_object_id": "campaign_draft_1",
-                        "ad_object_type": "adset",
-                        "status": "EDITING",
-                        "validation_status": "VALIDATED",
-                        "action": "add",
-                    }
-                ]
-            },
-        },
-        "act_1",
-    )
-    state.live_read_evidence.append(adset_evidence)
-
-    assert {"adset_draft_1", "campaign_draft_1"}.issubset(set(adset_evidence["target_ids"]))
-    assert _draft_evidence_errors(
-        "ads_create_ad",
-        {
-            "ad_account_id": "act_1",
-            "adset_id": "adset_draft_1",
-            "current_state": {"adset_draft_status": "EDITING"},
-        },
-        state,
-    ) == []
-
-
-def test_draft_mutation_requires_draft_readback_and_rejects_live_target() -> None:
-    state = AgentState(message="delete draft", account_id="act_1")
-    live_evidence = _build_live_read_evidence(
-        "ads_get_ad_entities",
-        {"ad_account_id": "act_1", "level": "campaign", "force_refresh": True},
-        {"tool": "ads_get_ad_entities", "result": {"ad_entities": [{"id": "cmp_1", "effective_status": "ACTIVE"}]}},
-        "act_1",
-    )
-    state.live_read_evidence.append(live_evidence)
-
-    assert _draft_mutation_evidence_errors(
-        "ads_update_entity",
-        {"ad_account_id": "act_1", "entity_id": "cmp_1", "entity_type": "campaign", "draft_only": True},
-        state,
-    )
-
-    draft_evidence = _build_live_read_evidence(
-        "ads_get_ad_entities",
-        {"ad_account_id": "act_1", "level": "campaign", "object_state": "draft", "force_refresh": True},
-        {"tool": "ads_get_ad_entities", "result": {"ad_drafts": [{"ad_object_id": "cmp_1", "status": "EDITING", "validation_status": "VALIDATED"}]}},
-        "act_1",
-    )
-    state.live_read_evidence.append(draft_evidence)
-
-    assert _draft_mutation_evidence_errors(
-        "ads_update_entity",
-        {"ad_account_id": "act_1", "entity_id": "cmp_1", "entity_type": "campaign", "draft_only": True},
-        state,
-    ) == []
-
-
-def test_direct_draft_delete_uses_mcp_and_never_marks_published(monkeypatch) -> None:
-    monkeypatch.setenv("META_DRAFT_WRITE_ENABLED", "true")
-    mcp = FakeMCP()
-    logged: list[dict[str, Any]] = []
-    registry = MetaToolRegistry(
-        mcp_client=mcp,
-        tool_definitions=_tool_definitions(),
-        direct_draft_logger=lambda event: logged.append(event),
-    )
-    registry.set_context("act_1", "Delete draft")
-
-    result = registry.mutate_draft(
-        "ads_update_entity",
-        {
-            "ad_account_id": "act_1",
-            "entity_id": "cmp_draft_1",
-            "entity_type": "campaign",
-            "fields": {"status": "DELETED"},
-            "evidence": "Draft read returned EDITING/VALIDATED.",
-            "recommendation": "Delete the abandoned draft.",
-            "risk_level": "low",
-            "current_state": {"draft_status": "EDITING"},
-            "draft_only": True,
-        },
-    )
-
-    assert result["deleted"] is True
-    assert result["published"] is False
-    assert mcp.calls[0][0] == "ads_update_entity"
-    assert "draft_only" not in mcp.calls[0][1]
-    assert logged[0]["operation"] == "deleted"
-
-
-def test_direct_draft_creation_is_blocked_without_explicit_confirmation(monkeypatch) -> None:
-    monkeypatch.setenv("META_DRAFT_WRITE_ENABLED", "true")
-    mcp = FakeMCP()
-    llm = FakeLLM(
-        [
-            _skill_response("campaign_plan"),
-            _function_response("ads_get_ad_accounts", {"limit": 3, "force_refresh": True}, search=True),
-            _function_response(
-                "ads_create_campaign",
-                {
-                    "ad_account_id": "act_1",
-                    "campaign_name": "Unconfirmed Draft",
-                    "objective": "OUTCOME_TRAFFIC",
-                    "buying_type": "AUCTION",
-                    "evidence": "Plan was prepared.",
-                    "recommendation": "Create the draft.",
-                    "risk_level": "low",
-                    "current_state": {"account_status": "ACTIVE"},
-                },
-            ),
-        ]
-    )
-    registry = MetaToolRegistry(
-        mcp_client=mcp,
-        tool_definitions=_official_tool_definitions(),
-        direct_draft_logger=lambda _event: None,
-    )
-    result = AgentRuntime(llm=llm, tools=registry, max_steps=3).run_turn(
-        "Create a new campaign draft.",
-        account_id="act_1",
-        draft_creation_authorized=False,
-    )
-
-    assert result["direct_drafts"] == []
-    create_trace = next(item for item in result["trace"] if item["tool"] == "meta_ads.ads_create_campaign")
-    assert create_trace["result"]["confirmation_required"] is True
-    assert create_trace["result"]["confirmation_phrase"] == "确认创建草稿"
-    assert [name for name, _ in mcp.calls] == ["ads_get_ad_accounts"]
-
-
-def test_draft_confirmation_phrase_is_explicit() -> None:
-    from backend.services.agent_turn_service import is_explicit_draft_confirmation
-
-    assert is_explicit_draft_confirmation("确认创建草稿") is True
-    assert is_explicit_draft_confirmation("确认创建草稿，请继续") is True
-    assert is_explicit_draft_confirmation("confirm create draft") is True
-    assert is_explicit_draft_confirmation("好的") is False
-
-
-def test_direct_draft_delete_with_active_errors_is_not_success(monkeypatch) -> None:
-    monkeypatch.setenv("META_DRAFT_WRITE_ENABLED", "true")
-
-    class ActiveErrorMCP(FakeMCP):
-        def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
-            self.calls.append((name, dict(arguments or {})))
-            return {
-                "success": True,
-                "entity_id": "cmp_draft_1",
-                "is_draft": True,
-                "active_errors": json.dumps([
-                    {"error_code": 1487564, "error_type": "AD_DRAFT_PUBLISHING", "error_description": "new campaign must be ACTIVE or PAUSED"}
-                ]),
-            }
-
-    logged: list[dict[str, Any]] = []
-    registry = MetaToolRegistry(
-        mcp_client=ActiveErrorMCP(),
-        tool_definitions=_tool_definitions(),
-        direct_draft_logger=logged.append,
-    )
-    result = registry.mutate_draft(
-        "ads_update_entity",
-        {
-            "ad_account_id": "act_1",
-            "entity_id": "cmp_draft_1",
-            "entity_type": "campaign",
-            "fields": {"status": "DELETED"},
-            "evidence": "Draft read returned EDITING/VALIDATED.",
-            "recommendation": "Delete the abandoned draft.",
-            "risk_level": "medium",
-            "current_state": {"draft_status": "EDITING"},
-            "draft_only": True,
-        },
-    )
-
-    assert result["status"] == "FAILED"
-    assert result["published"] is False
-    assert "1487564" in result["error"]
     assert logged[0]["created"] is False

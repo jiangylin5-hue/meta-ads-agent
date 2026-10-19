@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from backend.agent.context import ContextAssembler, compact_tool_outputs, split_recent_rounds
+from backend.agent.context import ContextAssembler, split_recent_rounds
 from backend.agent.runtime import AgentRuntime
 from backend.agent.skills import SkillCatalog
 from backend.agent.state import AgentState
@@ -630,85 +630,3 @@ def test_message_append_is_idempotent_for_same_turn(monkeypatch) -> None:
     assert first == second
     assert repository.append_calls == 1
     assert len(state["history"]) == 1
-
-
-def test_compact_tool_outputs_keeps_results_when_under_budget() -> None:
-    items = [
-        {"type": "function_call_output", "call_id": f"call_{index}", "output": json.dumps({"data": ["x" * 200]})}
-        for index in range(6)
-    ]
-    call_kinds = {f"call_{index}": "mcp" for index in range(6)}
-
-    result = compact_tool_outputs(items, call_kinds, max_tokens=10_000)
-
-    assert result is items
-
-
-def test_compact_tool_outputs_terminates_when_preserved_results_exceed_budget() -> None:
-    items = [
-        {"type": "function_call_output", "call_id": f"call_{index}", "output": json.dumps({"data": "x" * 4_000})}
-        for index in range(4)
-    ]
-    call_kinds = {f"call_{index}": "mcp" for index in range(4)}
-
-    result = compact_tool_outputs(items, call_kinds, keep_recent_mcp=3, max_tokens=10, max_iterations=8)
-
-    assert len(result) == len(items)
-    assert json.loads(result[0]["output"])["context_compacted"] is True
-    assert "Observation omitted" in json.loads(result[0]["output"])["note"]
-    assert result[1:] == items[1:]
-
-
-def test_task_state_carries_at_most_eight_active_skills() -> None:
-    repository = FakeTaskRepository()
-    service = TaskStateService(repository=repository)
-    task = {
-        "id": "task_1",
-        "account_id": "act_1",
-        "goal": "launch preparation",
-        "status": "active",
-        "progress": {"turn_count": 0, "recent": []},
-        "constraints": [],
-        "tool_ledger": [],
-        "active_skill_ids": ["account_brief"],
-    }
-
-    updated = service.apply_turn(
-        task,
-        task_update={},
-        trace=[],
-        skills_loaded=["skill_2", "skill_3", "skill_4", "skill_5", "skill_6", "skill_7", "skill_8", "skill_9"],
-        user_message="continue",
-        reply="done",
-        stopped_reason="final",
-    )
-
-    assert updated["active_skill_ids"] == ["account_brief", "skill_2", "skill_3", "skill_4", "skill_5", "skill_6", "skill_7", "skill_8"]
-
-
-def test_context_preserves_instructions_for_eight_active_skills() -> None:
-    catalog = SkillCatalog(Path("backend/skills"))
-    skill_ids = [
-        "account_brief",
-        "performance_diagnosis",
-        "creative_diagnosis",
-        "campaign_plan",
-        "policy_preflight",
-        "tracking_troubleshooting",
-        "audience_audit",
-        "catalog_health",
-    ]
-    active_skills = [catalog.load(skill_id) for skill_id in skill_ids]
-    package = ContextAssembler().assemble(
-        base_instructions="base",
-        history=[],
-        summary={},
-        task_state={"goal": "launch preparation"},
-        memories=[],
-        account_context={},
-        active_skills=active_skills,
-    )
-
-    assert package.manifest["active_skill_ids"] == skill_ids
-    for skill_id in skill_ids:
-        assert f"### Skill: {skill_id}" in package.instructions

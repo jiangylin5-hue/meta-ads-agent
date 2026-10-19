@@ -102,7 +102,7 @@ class TaskRepository(Repository):
         if tool_ledger is not None:
             values["tool_ledger_json"] = clean_json(tool_ledger[-40:])
         if active_skill_ids is not None:
-            values["active_skill_ids_json"] = [str(item) for item in active_skill_ids[:8]]
+            values["active_skill_ids_json"] = [str(item) for item in active_skill_ids[:4]]
         if metadata is not None:
             values["metadata_json"] = clean_json(metadata)
         if expires_at is not None:

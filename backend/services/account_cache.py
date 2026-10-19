@@ -17,15 +17,6 @@ TOOL_TTL_SECONDS = {
     "ads_insights_anomaly_signal": 1800,
     "ads_insights_advertiser_context": 1800,
     "ads_get_creatives": 86400,
-    "ga4_list_properties": 3600,
-    "ga4_get_property_details": 3600,
-    "ga4_list_data_streams": 3600,
-    "ga4_list_key_events": 3600,
-    "ga4_list_google_ads_links": 3600,
-    "ga4_get_metadata": 86400,
-    "ga4_run_report": 300,
-    "ga4_run_realtime_report": 15,
-    "ga4_run_funnel_report": 300,
 }
 DEFAULT_TOOL_TTL_SECONDS = 900
 MEDIA_TOOL_NAMES = {"get_ad_image", "get_ad_video", "get_image_by_hash", "ads_get_ad_images", "ads_get_ad_videos", "ads_get_ad_preview_screenshot"}

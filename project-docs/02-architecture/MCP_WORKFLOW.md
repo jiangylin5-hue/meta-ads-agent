@@ -4,11 +4,11 @@
 
 - Document status: active Meta MCP reference
 - Source of truth: [IMPLEMENTATION_SOURCE_OF_TRUTH.md](../00-governance/IMPLEMENTATION_SOURCE_OF_TRUTH.md)
-- Active stage: [STAGE_10_GA4_MEASUREMENT_TOOLS.md](../03-stages/STAGE_08_MCP_NATIVE_TOOLS_AND_SKILLS.md)
+- Active stage: [STAGE_09_CONTEXT_AND_AGENT_MEMORY.md](../03-stages/STAGE_09_CONTEXT_AND_AGENT_MEMORY.md)
 
 ## Goal
 
-The app discovers the Meta MCP tool catalog and exposes it to the model without loading every schema on every step. GA4 uses direct read-only Admin/Data APIs as global `ga4_*` tools and does not pass through this MCP client.
+The app discovers the Meta MCP tool catalog and exposes it to the model without loading every schema on every step.
 
 ```text
 tools/list
@@ -38,7 +38,7 @@ The official endpoint uses OAuth or a user/system-user access token. The project
 - Required scopes are `ads_read`, `ads_management`, and `ads_mcp_management`; use `business_management` when business reads are needed.
 - Never write the token value into documentation, source files, prompts, model context, Memory, cache, trace, logs, or Git.
 - Validate the credential with `scripts/doctor.py` and `scripts/verify_meta_access_token.py`.
-- Token Debugger must report a valid token for App `<meta_app_id>` and `expires_at=never`.
+- Token Debugger must report a valid token for App `<META_APP_ID>` and `expires_at=never`.
 - Rotation: generate a new token in Meta Business Settings, update both environment variables, restart the backend, and rerun both checks.
 
 ## Catalog

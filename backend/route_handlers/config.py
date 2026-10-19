@@ -21,7 +21,6 @@ from ..config import (
 )
 from ..agent.skills import SKILL_ORDER
 from ..integrations.meta_ads import MetaAdsProvider
-from ..services.ga4_gateway import Ga4Gateway
 
 router = APIRouter()
 
@@ -70,7 +69,6 @@ def config() -> dict[str, Any]:
             "account_cache": True,
         },
         "ads_providers": {"meta": MetaAdsProvider().status()},
-        "measurement_providers": {"ga4": _ga4_status()},
     }
 
 
@@ -78,15 +76,6 @@ def config() -> dict[str, Any]:
 def config_reload() -> dict[str, Any]:
     reload_dotenv()
     return config()
-
-
-
-
-def _ga4_status() -> dict[str, Any]:
-    try:
-        return Ga4Gateway().status()
-    except Exception as exc:
-        return {"provider": "google_analytics", "configured": False, "read_only": True, "error": type(exc).__name__}
 
 
 __all__ = [name for name in globals() if not name.startswith("__")]

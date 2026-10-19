@@ -19,7 +19,6 @@ class AgentState:
     live_read_evidence: list[dict[str, Any]] = field(default_factory=list)
     staged_actions: list[dict[str, Any]] = field(default_factory=list)
     direct_drafts: list[dict[str, Any]] = field(default_factory=list)
-    direct_draft_mutations: list[dict[str, Any]] = field(default_factory=list)
     submitted_result: dict[str, Any] | None = None
     stopped_reason: str = ""
     tool_ledger: list[dict[str, Any]] = field(default_factory=list)

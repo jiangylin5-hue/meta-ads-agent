@@ -4,7 +4,7 @@
 
 - Document status: active agent instructions
 - Source of truth: `project-docs/00-governance/IMPLEMENTATION_SOURCE_OF_TRUTH.md`
-- Active stage: `project-docs/03-stages/STAGE_10_GA4_MEASUREMENT_TOOLS.md`
+- Active stage: `project-docs/03-stages/STAGE_09_CONTEXT_AND_AGENT_MEMORY.md`
 
 This file is the implementation entry point for agents working in this repository. It defines required reading, stage boundaries, runtime rules, and verification expectations.
 
@@ -58,10 +58,9 @@ For documentation-only work, also confirm that the active stage permits the chan
 - A completed idempotency key replays the stored response. The same key with a different message or account is rejected.
 - `backend/agent/runtime.py` owns the bounded ReAct-style tool loop.
 - The model chooses tool calls. Code validates tool names, arguments against JSON Schema, step limits, and permissions. Runtime-only fields are rejected, and malformed argument JSON fails closed.
-- Read-only GA4 Admin and Data API tools are globally available model tools. They do not require `load_skill`, cannot write GA4 state, and must keep Meta, GA4, and CRM conversion evidence separate.
 - There is no separate intent router, fixed multi-role pipeline, or graph framework.
-- The runtime exposes 12 project Skill folders under `backend/skills/`. The model sees each `SKILL.md` name and description, calls `load_skill`, and may load at most eight Skills per turn. Each Skill can expose references that the model reads only when needed with `read_skill_reference`.
-- Active task Skills are carried forward with full instructions. The context keeps five recent conversation rounds, summarizes older dialogue, and estimates a 256,000-token input budget with a 16,384-token output reserve and a 96,000-token current-turn observation budget.
+- The runtime exposes 12 project Skill folders under `backend/skills/`. The model sees each `SKILL.md` name and description, calls `load_skill`, and may load at most four Skills per turn. Each Skill can expose references that the model reads only when needed with `read_skill_reference`.
+- Active task Skills are carried forward with full instructions. The context keeps five recent conversation rounds, summarizes older dialogue, and estimates a 36,000-token input budget with a 4,000-token output reserve.
 - The runtime defaults to 16 model-decision steps with a hard ceiling of 24 and a 600-second turn deadline.
 - Long-term Memory is typed and scoped to user or account. Short-term task state stores the current goal, progress, next step, blockers, active Skill ids, and a bounded structured tool ledger.
 - Account directory, prompt-ready account context, and MCP read results use persistent TTL caches. Stale cache may support analysis with an explicit `as_of`; before a write-like Draft, the relevant read must use `force_refresh=true` so the cache is bypassed and current state is read live.
@@ -113,11 +112,8 @@ provider write methods
 ```
 
 - Before a write-like tool, read the current entity state and collect evidence.
-- New Draft creation requires a plan-first response and a following user message containing `确认创建草稿`; code blocks create tools otherwise.
-- Draft budget/status/targeting edits and Draft deletion require `ads_update_entity` with `draft_only=true` and a fresh `object_state=draft` read for the exact account and target. Live edits remain forbidden.
-- Direct Draft create/update/delete calls and remaining local write-like tool names must carry `evidence`, `recommendation`, `risk_level`, and a non-empty `current_state`.
-- `backend/agent/tools.py` forwards only the four Draft creation tools and explicit `draft_only` `ads_update_entity` calls to MCP. Every other write-like call is staged locally or rejected. Official Draft Mode returns non-live draft objects; `ads_activate_entity` remains forbidden.
-- Creative content and landing-page changes use a replacement Creative and Ad because Meta creative content is immutable; activation and publication remain blocked.
+- Direct Draft creation and remaining local write-like tool names must carry `evidence`, `recommendation`, `risk_level`, and a non-empty `current_state`.
+- `backend/agent/tools.py` forwards only the four Draft creation tools to MCP. Every other write-like call is staged locally or rejected. Official Draft Mode returns non-live draft objects; `ads_activate_entity` remains forbidden.
 - Every direct Draft creation records an execution log with the account, tool, created entity id, and provider result summary.
 - Draft approval is not execution.
 - Live execution is disabled in this demo and returns `410 execution_disabled_in_demo`.

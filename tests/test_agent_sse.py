@@ -89,9 +89,6 @@ def test_runtime_emits_ordered_tool_lifecycle_and_validation_events() -> None:
 
     names = [name for name, _payload in events]
     assert names.count("step.started") == 3
-    assert names.count("model.started") == 3
-    assert names.count("model.finished") == 3
-    assert names.index("model.started") > names.index("step.started")
     assert names.count("tool.started") == 3
     assert names.count("tool.finished") == 3
     assert names.index("skill.loaded") > names.index("tool.finished")
@@ -383,17 +380,14 @@ def test_runtime_raises_agent_timeout_after_deadline() -> None:
             time.sleep(0.15)
             return {"content": "late", "output_items": [], "tool_calls": []}
 
-    events: list[tuple[str, dict[str, Any]]] = []
     runtime = AgentRuntime(llm=SlowLLM(), tools=registry(), max_steps=1, turn_timeout_seconds=0.1)
     try:
-        runtime.run_turn("slow request", on_event=lambda name, payload: events.append((name, payload)))
+        runtime.run_turn("slow request")
     except Exception as exc:
         assert type(exc).__name__ == "AgentTimeoutError"
         assert getattr(exc, "code") == "agent_timeout"
     else:
         raise AssertionError("timeout was not raised")
-    assert [name for name, _payload in events] == ["step.started", "model.started", "model.failed"]
-    assert events[-1][1]["reason"] == "hard_timeout"
 
 
 def test_failure_after_validation_is_not_retryable() -> None:

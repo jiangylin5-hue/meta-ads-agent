@@ -16,7 +16,7 @@ def test_catalog_exposes_exactly_twelve_project_skills() -> None:
     entries = catalog.catalog_entries()
 
     assert [item["id"] for item in entries] == list(SKILL_ORDER)
-    assert catalog.max_loaded_skills == 8
+    assert catalog.max_loaded_skills == 4
     assert catalog.max_loaded_references == 6
     catalog_text = catalog.catalog_text()
     assert all(item["id"] in catalog_text for item in entries)

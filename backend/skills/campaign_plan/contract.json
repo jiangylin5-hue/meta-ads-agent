@@ -1,7 +1,7 @@
 {
     "schema_version": "1.0",
     "id": "campaign_plan",
-    "version": "0.2.1",
+    "version": "0.2.0",
     "status": "draft",
     "description": "Build a Meta campaign plan and create non-live Meta Draft objects from offer, goal, budget, audience, destination, tracking, and business context.",
     "when_to_use": [
@@ -73,9 +73,8 @@
         "Do not invent targeting attributes or catalog products.",
         "Do not claim a Draft is live or published. Report the returned Draft object id and state.",
         "Create campaign, ad set, ad, and creative objects only through permitted create tools that return Draft Mode objects.",
-        "Never call activation or publish tools. Update or delete only existing Drafts through ads_update_entity with draft_only=true and fresh Draft readback.",
-        "Do not use a landing page audit result without a page-reading tool.",
-        "Require plan-first output and the exact user reply `确认创建草稿` before calling any create tool."
+        "Never call activation, update, delete, or publish tools.",
+        "Do not use a landing page audit result without a page-reading tool."
     ],
     "source_refs": [
         {
